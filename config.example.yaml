@@ -1,0 +1,14 @@
+llm:
+  base_url: "http://192.168.1.100:8080"   # local Qwen server
+  model: "qwen3-235b"
+  api_key: "local"                          # placeholder; some servers require a non-empty key
+  temperature: 0.2
+  max_tokens: 4096
+  timeout_seconds: 120
+
+extraction:
+  confidence_scores: true     # include _confidence fields in output schema
+  dry_run_first: true         # run on 1 PDF and confirm before batch
+  output_mode: "per_file"     # "per_file" or "merged"
+  chunk_size_pages: 20        # max pages per LLM call; 0 = no chunking
+  chunk_overlap_pages: 1

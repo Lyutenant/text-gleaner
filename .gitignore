@@ -1,0 +1,12 @@
+config.yaml
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+*.pdf
+output/
+results/
+CLAUDE.MD
