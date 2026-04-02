@@ -61,7 +61,7 @@ def _validate_schema(schema: dict) -> None:
 
 
 def generate_schema(
-    sample_paths: list[Path],
+    samples: list[tuple[str, str]],
     description: str,
     output_path: Path | None,
     *,
@@ -86,12 +86,12 @@ def generate_schema(
     )
 
     snippets: list[str] = []
-    for path in sample_paths:
-        text = path.read_text(encoding="utf-8", errors="replace").strip()
+    for text, name in samples:
+        text = text.strip()
         if text:
-            snippets.append(f"=== {path.name} ===\n{text}")
+            snippets.append(f"=== {name} ===\n{text}")
         else:
-            logger.warning("filename=%s error=empty_file", path.name)
+            logger.warning("filename=%s error=empty_file", name)
 
     if not snippets:
         raise ValueError("No readable text found in any sample file.")

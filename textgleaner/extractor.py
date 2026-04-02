@@ -1,7 +1,7 @@
 from __future__ import annotations
 import json
 import logging
-from pathlib import Path
+from pathlib import Path  # used only for output_path
 from typing import Any
 
 from .config import ExtractionConfig
@@ -26,10 +26,10 @@ Rules:
 """
 
 
-def _check_size(text: str, path: Path, max_chars: int) -> None:
+def _check_size(text: str, name: str, max_chars: int) -> None:
     if max_chars > 0 and len(text) > max_chars:
         raise ValueError(
-            f"Input '{path.name}' exceeds max_chars limit "
+            f"Input '{name}' exceeds max_chars limit "
             f"({len(text):,} > {max_chars:,}). "
             f"Split the file or increase max_chars."
         )
@@ -58,7 +58,7 @@ def _extract_one(client: LLMClient, schema: dict, text: str, filename: str) -> d
 
 
 def extract(
-    input_paths: list[Path],
+    inputs: list[tuple[str, str]],
     schema: dict,
     output_path: Path | None,
     single: bool,
@@ -83,21 +83,21 @@ def extract(
 
     results: dict[str, Any] = {}
 
-    for path in input_paths:
-        text = path.read_text(encoding="utf-8", errors="replace")
-        _check_size(text, path, effective_max)
-        logger.info("Extracting from %s (%d chars)", path.name, len(text))
-        data = _extract_one(client, schema, text, path.name)
-        results[path.name] = data
+    for text, name in inputs:
+        _check_size(text, name, effective_max)
+        logger.info("Extracting from %s (%d chars)", name, len(text))
+        data = _extract_one(client, schema, text, name)
+        results[name] = data
 
     if output_path is not None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        payload = results[input_paths[0].name] if single else results
+        first_name = inputs[0][1]
+        payload = results[first_name] if single else results
         with output_path.open("w") as f:
             json.dump(payload, f, indent=2)
             f.write("\n")
         logger.info("Wrote %s", output_path)
 
     if single:
-        return results[input_paths[0].name]
+        return results[inputs[0][1]]
     return results

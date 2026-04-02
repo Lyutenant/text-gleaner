@@ -54,8 +54,6 @@ class TestGenerateSchema:
         }
 
     def test_generates_and_writes_schema(self, tmp_path):
-        sample = tmp_path / "sample.txt"
-        sample.write_text("Account: 12345\nValue: $1000")
         output = tmp_path / "schema.json"
         schema = self._schema()
 
@@ -64,14 +62,14 @@ class TestGenerateSchema:
         mock_client.get_content.return_value = json.dumps(schema)
 
         with patch("textgleaner.schema_generator.LLMClient", return_value=mock_client):
-            result = generate_schema([sample], "Test document", output)
+            result = generate_schema(
+                [("Account: 12345\nValue: $1000", "sample.txt")], "Test document", output
+            )
 
         assert result["name"] == "extract_statement"
         assert output.exists()
 
-    def test_base_url_kwarg_passed_to_client(self, tmp_path):
-        sample = tmp_path / "sample.txt"
-        sample.write_text("some text")
+    def test_base_url_kwarg_passed_to_client(self):
         schema = self._schema()
 
         mock_client = MagicMock()
@@ -79,14 +77,12 @@ class TestGenerateSchema:
         mock_client.get_content.return_value = json.dumps(schema)
 
         with patch("textgleaner.schema_generator.LLMClient", return_value=mock_client) as MockClient:
-            generate_schema([sample], "Test", None, base_url="http://custom:9999")
+            generate_schema([("some text", "sample.txt")], "Test", None, base_url="http://custom:9999")
 
         _, kwargs = MockClient.call_args
         assert kwargs.get("base_url") == "http://custom:9999"
 
     def test_retries_on_invalid_json(self, tmp_path):
-        sample = tmp_path / "sample.txt"
-        sample.write_text("some text")
         output = tmp_path / "schema.json"
         schema = self._schema()
 
@@ -95,14 +91,11 @@ class TestGenerateSchema:
         mock_client.get_content.side_effect = ["not valid json", json.dumps(schema)]
 
         with patch("textgleaner.schema_generator.LLMClient", return_value=mock_client):
-            result = generate_schema([sample], "Test", output)
+            result = generate_schema([("some text", "sample.txt")], "Test", output)
 
         assert result["name"] == "extract_statement"
         assert mock_client.chat.call_count == 2
 
-    def test_empty_sample_raises(self, tmp_path):
-        sample = tmp_path / "empty.txt"
-        sample.write_text("")
-
+    def test_empty_sample_raises(self):
         with pytest.raises(ValueError, match="No readable text"):
-            generate_schema([sample], "Test", None)
+            generate_schema([("", "empty.txt")], "Test", None)

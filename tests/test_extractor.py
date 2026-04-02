@@ -9,15 +9,15 @@ from textgleaner.extractor import extract, _check_size
 
 
 class TestCheckSize:
-    def test_within_limit_passes(self, tmp_path):
-        _check_size("hello", tmp_path / "f.txt", 100)
+    def test_within_limit_passes(self):
+        _check_size("hello", "f.txt", 100)
 
-    def test_exceeds_limit_raises(self, tmp_path):
+    def test_exceeds_limit_raises(self):
         with pytest.raises(ValueError, match="max_chars"):
-            _check_size("x" * 101, tmp_path / "f.txt", 100)
+            _check_size("x" * 101, "f.txt", 100)
 
-    def test_zero_limit_disabled(self, tmp_path):
-        _check_size("x" * 1_000_000, tmp_path / "f.txt", 0)
+    def test_zero_limit_disabled(self):
+        _check_size("x" * 1_000_000, "f.txt", 0)
 
 
 class TestExtract:
@@ -30,24 +30,17 @@ class TestExtract:
             }},
         }
 
-    def test_single_input_returns_flat_dict(self, tmp_path):
-        f = tmp_path / "doc.txt"
-        f.write_text("Account: 12345")
-
+    def test_single_input_returns_flat_dict(self):
         mock_client = MagicMock()
         mock_client.chat.return_value = {}
         mock_client.get_tool_arguments.return_value = {"account_number": "12345"}
 
         with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
-            result = extract([f], self._schema(), None, single=True)
+            result = extract([("Account: 12345", "doc.txt")], self._schema(), None, single=True)
 
         assert result == {"account_number": "12345"}
 
-    def test_multiple_inputs_returns_keyed_dict(self, tmp_path):
-        f1, f2 = tmp_path / "jan.txt", tmp_path / "feb.txt"
-        f1.write_text("Account: 111")
-        f2.write_text("Account: 222")
-
+    def test_multiple_inputs_returns_keyed_dict(self):
         mock_client = MagicMock()
         mock_client.chat.return_value = {}
         mock_client.get_tool_arguments.side_effect = [
@@ -56,7 +49,10 @@ class TestExtract:
         ]
 
         with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
-            result = extract([f1, f2], self._schema(), None, single=False)
+            result = extract(
+                [("Account: 111", "jan.txt"), ("Account: 222", "feb.txt")],
+                self._schema(), None, single=False,
+            )
 
         assert result == {
             "jan.txt": {"account_number": "111"},
@@ -64,8 +60,6 @@ class TestExtract:
         }
 
     def test_output_written_for_single(self, tmp_path):
-        f = tmp_path / "doc.txt"
-        f.write_text("Account: 12345")
         out = tmp_path / "result.json"
 
         mock_client = MagicMock()
@@ -73,29 +67,23 @@ class TestExtract:
         mock_client.get_tool_arguments.return_value = {"account_number": "12345"}
 
         with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
-            extract([f], self._schema(), out, single=True)
+            extract([("Account: 12345", "doc.txt")], self._schema(), out, single=True)
 
         assert out.exists()
         assert json.loads(out.read_text())["account_number"] == "12345"
 
-    def test_size_limit_enforced(self, tmp_path):
-        f = tmp_path / "big.txt"
-        f.write_text("x" * 1000)
-
+    def test_size_limit_enforced(self):
         with pytest.raises(ValueError, match="max_chars"):
-            extract([f], self._schema(), None, single=True, max_chars=100)
+            extract([("x" * 1000, "big.txt")], self._schema(), None, single=True, max_chars=100)
 
-    def test_size_limit_kwarg_overrides_default(self, tmp_path):
-        f = tmp_path / "doc.txt"
-        f.write_text("x" * 300_000)
-
+    def test_size_limit_kwarg_overrides_default(self):
         mock_client = MagicMock()
         mock_client.chat.return_value = {}
         mock_client.get_tool_arguments.return_value = {"account_number": "x"}
 
         with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
             # Default is 200_000 — would fail without override
-            result = extract([f], self._schema(), None, single=True, max_chars=0)
+            result = extract([("x" * 300_000, "doc.txt")], self._schema(), None, single=True, max_chars=0)
 
         assert "account_number" in result
 
@@ -123,6 +111,31 @@ class TestPublicAPI:
             result = extract(str(f), schema=self._schema())
 
         assert result == {"value": "42"}
+
+    def test_text_instance_single(self):
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        mock_client.get_tool_arguments.return_value = {"value": "99"}
+
+        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+            from textgleaner import extract, Text
+            result = extract(Text("Value: 99", name="section"), schema=self._schema())
+
+        assert result == {"value": "99"}
+
+    def test_text_instance_uses_name_as_key(self):
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        mock_client.get_tool_arguments.side_effect = [{"value": "a"}, {"value": "b"}]
+
+        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+            from textgleaner import extract, Text
+            result = extract(
+                [Text("...", name="holdings"), Text("...", name="activities")],
+                schema=self._schema(),
+            )
+
+        assert set(result.keys()) == {"holdings", "activities"}
 
     def test_base_url_kwarg_passed_to_client(self, tmp_path):
         f = tmp_path / "doc.txt"
