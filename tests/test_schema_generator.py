@@ -59,7 +59,8 @@ class TestGenerateSchema:
 
         mock_client = MagicMock()
         mock_client.chat.return_value = {}
-        mock_client.get_content.return_value = json.dumps(schema)
+        # Pass 1 returns analysis text; Pass 2 returns valid schema JSON
+        mock_client.get_content.side_effect = ["Section: Account value. Fields: account_number.", json.dumps(schema)]
 
         with patch("textgleaner.schema_generator.LLMClient", return_value=mock_client):
             result = generate_schema(
@@ -68,13 +69,14 @@ class TestGenerateSchema:
 
         assert result["name"] == "extract_statement"
         assert output.exists()
+        assert mock_client.chat.call_count == 2  # one per pass
 
     def test_base_url_kwarg_passed_to_client(self):
         schema = self._schema()
 
         mock_client = MagicMock()
         mock_client.chat.return_value = {}
-        mock_client.get_content.return_value = json.dumps(schema)
+        mock_client.get_content.side_effect = ["analysis text", json.dumps(schema)]
 
         with patch("textgleaner.schema_generator.LLMClient", return_value=mock_client) as MockClient:
             generate_schema([("some text", "sample.txt")], "Test", None, base_url="http://custom:9999")
@@ -88,13 +90,14 @@ class TestGenerateSchema:
 
         mock_client = MagicMock()
         mock_client.chat.return_value = {}
-        mock_client.get_content.side_effect = ["not valid json", json.dumps(schema)]
+        # Pass 1: analysis; Pass 2 first attempt: bad JSON; Pass 2 retry: valid schema
+        mock_client.get_content.side_effect = ["analysis text", "not valid json", json.dumps(schema)]
 
         with patch("textgleaner.schema_generator.LLMClient", return_value=mock_client):
             result = generate_schema([("some text", "sample.txt")], "Test", output)
 
         assert result["name"] == "extract_statement"
-        assert mock_client.chat.call_count == 2
+        assert mock_client.chat.call_count == 3  # analysis + schema attempt + retry
 
     def test_empty_sample_raises(self):
         with pytest.raises(ValueError, match="No readable text"):
