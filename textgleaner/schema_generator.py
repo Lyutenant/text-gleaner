@@ -1,20 +1,16 @@
 from __future__ import annotations
 import json
 import logging
-import random
 from pathlib import Path
 from typing import Any
 
-import yaml
-
-from .config import get_config
+from .config import ExtractionConfig
 from .llm_client import LLMClient
-from .pdf_reader import extract_text_from_pdf, chunk_pages
 
 logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """\
-You are a data extraction schema designer. Given sample PDF text and a document description, \
+You are a data extraction schema designer. Given sample document text and a description, \
 generate a single JSON object that is a valid OpenAI-compatible tool/function definition for \
 structured data extraction.
 
@@ -48,27 +44,8 @@ def _build_system_prompt(confidence_scores: bool) -> str:
     return SYSTEM_PROMPT.format(confidence_instruction=ci)
 
 
-def _sample_pdfs(pdfs_dir: Path, sample_ratio: float, sample_dir: Path | None) -> list[Path]:
-    if sample_dir is not None:
-        return sorted(sample_dir.glob("*.pdf"))
-    all_pdfs = sorted(pdfs_dir.glob("*.pdf"))
-    if sample_ratio >= 1.0 or not all_pdfs:
-        return all_pdfs
-    k = max(1, int(len(all_pdfs) * sample_ratio))
-    return random.sample(all_pdfs, k)
-
-
-def _extract_snippet(path: Path, max_pages: int = 5) -> str:
-    pages = extract_text_from_pdf(path)
-    if not pages:
-        return ""
-    snippet_pages = pages[:max_pages]
-    return "\n\n".join(p for p in snippet_pages if p.strip())
-
-
 def _parse_schema_json(text: str) -> dict:
     text = text.strip()
-    # Strip markdown fences if present
     if text.startswith("```"):
         lines = text.splitlines()
         text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
@@ -79,54 +56,54 @@ def _validate_schema(schema: dict) -> None:
     for key in ("name", "description", "parameters"):
         if key not in schema:
             raise ValueError(f"Schema missing required key: '{key}'")
-    params = schema["parameters"]
-    if "properties" not in params:
+    if "properties" not in schema["parameters"]:
         raise ValueError("Schema 'parameters' missing 'properties'")
 
 
 def generate_schema(
-    pdfs_dir: Path,
-    description_file: Path,
-    output_file: Path,
-    sample_ratio: float = 1.0,
-    sample_dir: Path | None = None,
+    sample_paths: list[Path],
+    description: str,
+    output_path: Path | None,
+    *,
+    confidence_scores: bool | None = None,
+    base_url: str | None = None,
+    model: str | None = None,
+    api_key: str | None = None,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+    timeout: int | None = None,
 ) -> dict:
-    cfg = get_config()
-    client = LLMClient()
+    if confidence_scores is None:
+        confidence_scores = ExtractionConfig().confidence_scores
 
-    # Load description
-    with description_file.open() as f:
-        if description_file.suffix in (".yaml", ".yml"):
-            desc_content = yaml.safe_load(f)
-            desc_text = yaml.dump(desc_content, default_flow_style=False)
-        else:
-            desc_text = f.read()
+    client = LLMClient(
+        base_url=base_url,
+        model=model,
+        api_key=api_key,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        timeout=timeout,
+    )
 
-    # Collect sample PDFs
-    sample_pdfs = _sample_pdfs(pdfs_dir, sample_ratio, sample_dir)
-    if not sample_pdfs:
-        raise ValueError(f"No PDFs found in {pdfs_dir}")
-
-    logger.info("Using %d sample PDFs for schema generation", len(sample_pdfs))
-
-    # Build sample text snippets
     snippets: list[str] = []
-    for pdf_path in sample_pdfs:
-        snippet = _extract_snippet(pdf_path)
-        if snippet:
-            snippets.append(f"=== {pdf_path.name} ===\n{snippet}")
+    for path in sample_paths:
+        text = path.read_text(encoding="utf-8", errors="replace").strip()
+        if text:
+            snippets.append(f"=== {path.name} ===\n{text}")
         else:
-            logger.warning("filename=%s error=no_extractable_text", pdf_path.name)
+            logger.warning("filename=%s error=empty_file", path.name)
 
-    sample_text = "\n\n".join(snippets) if snippets else "(no sample text extracted)"
+    if not snippets:
+        raise ValueError("No readable text found in any sample file.")
 
+    sample_text = "\n\n".join(snippets)
     user_message = (
-        f"Document description:\n{desc_text}\n\n"
-        f"Sample PDF text snippets:\n{sample_text}\n\n"
+        f"Document description:\n{description}\n\n"
+        f"Sample document text:\n{sample_text}\n\n"
         "Generate the JSON tool definition now."
     )
 
-    system_prompt = _build_system_prompt(cfg.extraction.confidence_scores)
+    system_prompt = _build_system_prompt(confidence_scores)
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_message},
@@ -146,7 +123,6 @@ def generate_schema(
         logger.warning("Schema parse failed, retrying: %s", parse_error)
 
     if schema is None:
-        # Retry once
         retry_messages = messages + [
             {"role": "assistant", "content": raw_content},
             {"role": "user", "content": RETRY_PROMPT.format(error=parse_error)},
@@ -159,19 +135,19 @@ def generate_schema(
         except (json.JSONDecodeError, ValueError) as e:
             raise ValueError(f"Schema generation failed after retry: {e}") from e
 
-    # Write output
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-    with output_file.open("w") as f:
-        json.dump(schema, f, indent=2)
-        f.write("\n")
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with output_path.open("w") as f:
+            json.dump(schema, f, indent=2)
+            f.write("\n")
 
-    # Print summary
     props = schema.get("parameters", {}).get("properties", {})
     data_fields = [k for k in props if not k.endswith("_confidence")]
     print(f"Generated schema '{schema['name']}' with {len(data_fields)} data fields:")
     for field in data_fields:
         prop = props[field]
         print(f"  - {field}: {prop.get('type')} — {prop.get('description', '')[:60]}")
-    print(f"\nSchema written to: {output_file}")
+    if output_path:
+        print(f"\nSchema written to: {output_path}")
 
     return schema

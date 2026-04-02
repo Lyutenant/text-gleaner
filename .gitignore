@@ -5,8 +5,8 @@ __pycache__/
 dist/
 build/
 .venv/
+.vscode/
 venv/
-*.pdf
 output/
 results/
-CLAUDE.MD
+sandbox/

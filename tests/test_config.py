@@ -1,43 +1,54 @@
 from __future__ import annotations
-import os
-from pathlib import Path
-
-import pytest
-import yaml
 
 
-class TestConfigLoading:
-    def test_loads_from_yaml(self, tmp_path):
-        config_file = tmp_path / "config.yaml"
-        config_file.write_text(
-            "llm:\n  base_url: http://test:9999\n  model: test-model\nextraction:\n  chunk_size_pages: 5\n"
-        )
-        from pdfetch import config as cfg_module
-        cfg_module._config = None  # reset singleton
+class TestLLMConfig:
+    def test_defaults(self):
+        from textgleaner.config import LLMConfig
+        cfg = LLMConfig()
+        assert cfg.base_url == "http://localhost:8080"
+        assert cfg.model == "qwen3-235b"
+        assert cfg.temperature == 0.2
+        assert cfg.timeout_seconds == 120
 
-        app_cfg = cfg_module.AppConfig(config_file)
-        assert app_cfg.llm.base_url == "http://test:9999"
-        assert app_cfg.llm.model == "test-model"
-        assert app_cfg.extraction.chunk_size_pages == 5
+    def test_env_var_override(self, monkeypatch):
+        monkeypatch.setenv("TEXTGLEANER__LLM__BASE_URL", "http://envvar:9999")
+        monkeypatch.setenv("TEXTGLEANER__LLM__MODEL", "custom-model")
+        from textgleaner.config import LLMConfig
+        cfg = LLMConfig()
+        assert cfg.base_url == "http://envvar:9999"
+        assert cfg.model == "custom-model"
 
-    def test_env_var_overrides_yaml(self, tmp_path, monkeypatch):
-        config_file = tmp_path / "config.yaml"
-        config_file.write_text("llm:\n  base_url: http://yaml:8080\n")
 
-        monkeypatch.setenv("PDFETCH__LLM__BASE_URL", "http://envvar:1234")
+class TestExtractionConfig:
+    def test_defaults(self):
+        from textgleaner.config import ExtractionConfig
+        cfg = ExtractionConfig()
+        assert cfg.max_chars == 200_000
+        assert cfg.confidence_scores is True
 
-        from pdfetch import config as cfg_module
-        cfg_module._config = None
+    def test_env_var_override(self, monkeypatch):
+        monkeypatch.setenv("TEXTGLEANER__EXTRACTION__MAX_CHARS", "50000")
+        monkeypatch.setenv("TEXTGLEANER__EXTRACTION__CONFIDENCE_SCORES", "false")
+        from textgleaner.config import ExtractionConfig
+        cfg = ExtractionConfig()
+        assert cfg.max_chars == 50000
+        assert cfg.confidence_scores is False
 
-        app_cfg = cfg_module.AppConfig(config_file)
-        assert app_cfg.llm.base_url == "http://envvar:1234"
 
-    def test_defaults_when_no_config_file(self, tmp_path):
-        from pdfetch import config as cfg_module
-        cfg_module._config = None
+class TestLLMClient:
+    def test_kwargs_override_env(self, monkeypatch):
+        monkeypatch.setenv("TEXTGLEANER__LLM__BASE_URL", "http://env:8080")
+        from textgleaner.llm_client import LLMClient
+        client = LLMClient(base_url="http://kwarg:1234")
+        assert client.base_url == "http://kwarg:1234"
 
-        nonexistent = tmp_path / "no_config.yaml"
-        app_cfg = cfg_module.AppConfig(nonexistent)
-        # Should use defaults
-        assert app_cfg.extraction.output_mode == "per_file"
-        assert app_cfg.extraction.chunk_overlap_pages == 1
+    def test_falls_back_to_env(self, monkeypatch):
+        monkeypatch.setenv("TEXTGLEANER__LLM__BASE_URL", "http://env:5678")
+        from textgleaner.llm_client import LLMClient
+        client = LLMClient()
+        assert client.base_url == "http://env:5678"
+
+    def test_trailing_slash_stripped(self):
+        from textgleaner.llm_client import LLMClient
+        client = LLMClient(base_url="http://host:8080/")
+        assert client.base_url == "http://host:8080"

@@ -1,116 +1,140 @@
 from __future__ import annotations
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from pdfetch.utils import merge_chunks, null_rate
+from textgleaner.extractor import extract, _check_size
 
 
-class TestMergeChunks:
-    def test_empty_returns_empty(self):
-        assert merge_chunks([]) == {}
+class TestCheckSize:
+    def test_within_limit_passes(self, tmp_path):
+        _check_size("hello", tmp_path / "f.txt", 100)
 
-    def test_single_chunk_returned_as_is(self):
-        chunk = {"name": "Alice", "amount": 100}
-        assert merge_chunks([chunk]) == chunk
+    def test_exceeds_limit_raises(self, tmp_path):
+        with pytest.raises(ValueError, match="max_chars"):
+            _check_size("x" * 101, tmp_path / "f.txt", 100)
 
-    def test_later_chunk_fills_nulls(self):
-        chunk1 = {"name": "Alice", "amount": None}
-        chunk2 = {"name": None, "amount": 200}
-        result = merge_chunks([chunk1, chunk2])
-        assert result["name"] == "Alice"   # chunk1 had value
-        assert result["amount"] == 200     # chunk1 had null, chunk2 fills it
-
-    def test_earlier_value_not_overwritten(self):
-        chunk1 = {"name": "Alice"}
-        chunk2 = {"name": "Bob"}
-        result = merge_chunks([chunk1, chunk2])
-        assert result["name"] == "Alice"
-
-    def test_three_chunks(self):
-        c1 = {"a": "first", "b": None, "c": None}
-        c2 = {"a": None, "b": "second", "c": None}
-        c3 = {"a": None, "b": None, "c": "third"}
-        result = merge_chunks([c1, c2, c3])
-        assert result == {"a": "first", "b": "second", "c": "third"}
+    def test_zero_limit_disabled(self, tmp_path):
+        _check_size("x" * 1_000_000, tmp_path / "f.txt", 0)
 
 
-class TestNullRate:
-    def test_empty_records(self):
-        assert null_rate([]) == {}
-
-    def test_all_null(self):
-        records = [{"field": None}, {"field": None}]
-        rates = null_rate(records)
-        assert rates["field"] == 1.0
-
-    def test_no_nulls(self):
-        records = [{"field": "a"}, {"field": "b"}]
-        rates = null_rate(records)
-        assert rates["field"] == 0.0
-
-    def test_partial_nulls(self):
-        records = [{"field": "a"}, {"field": None}, {"field": "c"}, {"field": None}]
-        rates = null_rate(records)
-        assert rates["field"] == 0.5
-
-    def test_confidence_fields_excluded(self):
-        records = [{"amount": None, "amount_confidence": 0.0}]
-        rates = null_rate(records)
-        assert "amount_confidence" not in rates
-        assert "amount" in rates
-
-
-class TestExtractIntegration:
-    """Integration-style tests for the extractor using mocked LLM."""
-
-    def _make_schema(self):
+class TestExtract:
+    def _schema(self):
         return {
             "name": "extract_data",
-            "description": "Test extraction",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "account_number": {"type": ["string", "null"], "description": "Account #"},
-                },
-            },
+            "description": "Test",
+            "parameters": {"type": "object", "properties": {
+                "account_number": {"type": ["string", "null"], "description": "Account #"},
+            }},
         }
 
-    def test_extract_single_pdf(self, tmp_path):
-        from pdfetch.extractor import extract
-
-        pdfs_dir = tmp_path / "pdfs"
-        pdfs_dir.mkdir()
-        fake_pdf = pdfs_dir / "statement.pdf"
-        fake_pdf.write_bytes(b"%PDF fake")
-
-        schema_file = tmp_path / "schema.json"
-        schema = self._make_schema()
-        schema_file.write_text(json.dumps(schema))
-
-        output_dir = tmp_path / "output"
-        extracted_data = {"account_number": "12345678"}
+    def test_single_input_returns_flat_dict(self, tmp_path):
+        f = tmp_path / "doc.txt"
+        f.write_text("Account: 12345")
 
         mock_client = MagicMock()
         mock_client.chat.return_value = {}
-        mock_client.get_tool_arguments.return_value = extracted_data
+        mock_client.get_tool_arguments.return_value = {"account_number": "12345"}
 
-        with patch("pdfetch.extractor.LLMClient", return_value=mock_client):
-            with patch("pdfetch.extractor.extract_text_from_pdf", return_value=["page text"]):
-                # Patch config to disable dry_run_first
-                from pdfetch.config import AppConfig, LLMConfig, ExtractionConfig
-                mock_cfg = MagicMock()
-                mock_cfg.extraction.dry_run_first = False
-                mock_cfg.extraction.chunk_size_pages = 0
-                mock_cfg.extraction.chunk_overlap_pages = 0
-                mock_cfg.extraction.output_mode = "per_file"
+        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+            result = extract([f], self._schema(), None, single=True)
 
-                with patch("pdfetch.extractor.get_config", return_value=mock_cfg):
-                    extract(pdfs_dir, schema_file, output_dir, dry_run=False)
+        assert result == {"account_number": "12345"}
 
-        out_file = output_dir / "statement.json"
-        assert out_file.exists()
-        result = json.loads(out_file.read_text())
-        assert result["account_number"] == "12345678"
+    def test_multiple_inputs_returns_keyed_dict(self, tmp_path):
+        f1, f2 = tmp_path / "jan.txt", tmp_path / "feb.txt"
+        f1.write_text("Account: 111")
+        f2.write_text("Account: 222")
+
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        mock_client.get_tool_arguments.side_effect = [
+            {"account_number": "111"},
+            {"account_number": "222"},
+        ]
+
+        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+            result = extract([f1, f2], self._schema(), None, single=False)
+
+        assert result == {
+            "jan.txt": {"account_number": "111"},
+            "feb.txt": {"account_number": "222"},
+        }
+
+    def test_output_written_for_single(self, tmp_path):
+        f = tmp_path / "doc.txt"
+        f.write_text("Account: 12345")
+        out = tmp_path / "result.json"
+
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        mock_client.get_tool_arguments.return_value = {"account_number": "12345"}
+
+        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+            extract([f], self._schema(), out, single=True)
+
+        assert out.exists()
+        assert json.loads(out.read_text())["account_number"] == "12345"
+
+    def test_size_limit_enforced(self, tmp_path):
+        f = tmp_path / "big.txt"
+        f.write_text("x" * 1000)
+
+        with pytest.raises(ValueError, match="max_chars"):
+            extract([f], self._schema(), None, single=True, max_chars=100)
+
+    def test_size_limit_kwarg_overrides_default(self, tmp_path):
+        f = tmp_path / "doc.txt"
+        f.write_text("x" * 300_000)
+
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        mock_client.get_tool_arguments.return_value = {"account_number": "x"}
+
+        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+            # Default is 200_000 — would fail without override
+            result = extract([f], self._schema(), None, single=True, max_chars=0)
+
+        assert "account_number" in result
+
+
+class TestPublicAPI:
+    def _schema(self):
+        return {
+            "name": "extract_data",
+            "description": "Test",
+            "parameters": {"type": "object", "properties": {
+                "value": {"type": ["string", "null"], "description": "Value"},
+            }},
+        }
+
+    def test_single_path_string(self, tmp_path):
+        f = tmp_path / "doc.txt"
+        f.write_text("Value: 42")
+
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        mock_client.get_tool_arguments.return_value = {"value": "42"}
+
+        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+            from textgleaner import extract
+            result = extract(str(f), schema=self._schema())
+
+        assert result == {"value": "42"}
+
+    def test_base_url_kwarg_passed_to_client(self, tmp_path):
+        f = tmp_path / "doc.txt"
+        f.write_text("Value: 99")
+
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        mock_client.get_tool_arguments.return_value = {"value": "99"}
+
+        with patch("textgleaner.extractor.LLMClient", return_value=mock_client) as MockClient:
+            from textgleaner import extract
+            extract(str(f), schema=self._schema(), base_url="http://custom:9999")
+
+        _, kwargs = MockClient.call_args
+        assert kwargs.get("base_url") == "http://custom:9999"

@@ -7,8 +7,6 @@ llm:
   timeout_seconds: 120
 
 extraction:
-  confidence_scores: true     # include _confidence fields in output schema
-  dry_run_first: true         # run on 1 PDF and confirm before batch
-  output_mode: "per_file"     # "per_file" or "merged"
-  chunk_size_pages: 20        # max pages per LLM call; 0 = no chunking
-  chunk_overlap_pages: 1
+  confidence_scores: true   # include _confidence fields in generated schema
+  max_chars: 200000         # max characters per input file; 0 = no limit
+                            # env override: TEXTGLEANER__EXTRACTION__MAX_CHARS
