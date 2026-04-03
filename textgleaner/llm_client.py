@@ -38,7 +38,7 @@ class LLMClient:
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
-            "stream": False,
+            "stream": True,   # streaming keeps the connection alive over slow/remote links
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
             "extra_body": {"think": False},
@@ -53,11 +53,52 @@ class LLMClient:
         logger.debug("POST %s model=%s", url, self.model)
 
         with httpx.Client(timeout=self.timeout) as client:
-            resp = client.post(url, json=payload, headers=headers)
-            if not resp.is_success:
-                logger.error("HTTP %d from %s: %s", resp.status_code, url, resp.text[:500])
-            resp.raise_for_status()
-            return resp.json()
+            with client.stream("POST", url, json=payload, headers=headers) as resp:
+                if not resp.is_success:
+                    body = resp.read()
+                    logger.error("HTTP %d from %s: %s", resp.status_code, url, body[:500])
+                    resp.raise_for_status()
+
+                content_parts: list[str] = []
+                tool_call_parts: dict[int, dict] = {}
+                finish_reason: str | None = None
+
+                for line in resp.iter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    data = line[6:]
+                    if data == "[DONE]":
+                        break
+                    chunk = json.loads(data)
+                    choice = chunk.get("choices", [{}])[0]
+                    delta = choice.get("delta", {})
+                    finish_reason = choice.get("finish_reason") or finish_reason
+
+                    if delta.get("content"):
+                        content_parts.append(delta["content"])
+
+                    for tc in delta.get("tool_calls", []):
+                        idx = tc.get("index", 0)
+                        if idx not in tool_call_parts:
+                            tool_call_parts[idx] = {
+                                "id": tc.get("id", ""),
+                                "type": "function",
+                                "function": {"name": "", "arguments": ""},
+                            }
+                        fn = tc.get("function", {})
+                        if fn.get("name"):
+                            tool_call_parts[idx]["function"]["name"] += fn["name"]
+                        if fn.get("arguments"):
+                            tool_call_parts[idx]["function"]["arguments"] += fn["arguments"]
+
+        # Reassemble into the same shape as a non-streaming response so callers
+        # (get_content / get_tool_arguments) don't need to change.
+        content = "".join(content_parts) or None
+        message: dict[str, Any] = {"role": "assistant", "content": content}
+        if tool_call_parts:
+            message["tool_calls"] = [tool_call_parts[i] for i in sorted(tool_call_parts)]
+
+        return {"choices": [{"message": message, "finish_reason": finish_reason}]}
 
     def get_content(self, response: dict) -> str:
         return response["choices"][0]["message"].get("content") or ""

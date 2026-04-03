@@ -25,7 +25,7 @@ llm:
   model: "qwen3.5:35b-a3b-q4_K_M"
   api_key: "local"
   temperature: 0.2
-  max_tokens: 16384
+  max_tokens: 32768
   timeout_seconds: 1800
 
 extraction:
@@ -33,7 +33,7 @@ extraction:
   max_chars: 200000
 ```
 
-Environment variable override prefix: `TEXTGLEANER__LLM__BASE_URL`, `TEXTGLEANER__EXTRACTION__MAX_CHARS`, etc.
+**`config.yaml` is only read by the CLI** (`cli.py` loads it explicitly). The Python API (`generate_schema()`, `extract()`) reads configuration from **environment variables** only (`TEXTGLEANER__LLM__BASE_URL`, `TEXTGLEANER__EXTRACTION__MAX_CHARS`, etc.), or from kwargs passed directly to the function. If you use the Python API and want to load from `config.yaml`, read it yourself and pass the values as kwargs.
 
 **Never hardcode the base URL.** Always load from config.
 
@@ -45,6 +45,10 @@ Ollama exposes two APIs. The native `/api/chat` silently ignores `tool_choice`, 
 
 Qwen3 models have an extended reasoning ("thinking") mode that consumes tokens before generating content. It is disabled by sending `"extra_body": {"think": false}` in the request payload to prevent token budget exhaustion on large documents.
 
+### Streaming to avoid TCP timeouts
+
+All LLM requests use `"stream": true`. Without streaming, Ollama generates the entire response server-side before sending the first byte. On remote or VPN connections (e.g. Tailscale) the TCP connection goes idle during generation and times out before any response arrives — even with a long `timeout_seconds`. With streaming, the server sends tokens as they are generated, keeping the connection alive throughout. `LLMClient.chat()` reassembles the SSE stream into the same response dict shape as a non-streaming call, so `get_content()` and `get_tool_arguments()` are unchanged.
+
 ---
 
 ## Architecture
@@ -52,7 +56,7 @@ Qwen3 models have an extended reasoning ("thinking") mode that consumes tokens b
 ```
 textgleaner/
 ├── cli.py              # typer entrypoint; two commands: generate-schema, extract
-├── config.py           # pydantic-settings model; loads config.yaml + env overrides
+├── config.py           # pydantic-settings model; env var overrides only (no YAML)
 ├── llm_client.py       # thin httpx wrapper; OpenAI-compatible /v1/chat/completions
 ├── schema_generator.py # Phase 1 logic
 ├── extractor.py        # Phase 2 logic
@@ -64,12 +68,12 @@ textgleaner/
 ## Public Python API
 
 ```python
-from textgleaner import generate_schema, extract
+from textgleaner import generate_schema, extract, Text
 
 # Phase 1
 schema = generate_schema(
-    samples=["jan.txt", "feb.txt"],   # list of paths to sample text files
-    description="...",                 # raw string OR path to .yaml/.md file
+    samples=["jan.txt", "feb.txt"],   # list of paths (str/Path) or Text instances
+    description="...",                 # raw string OR path to a .yaml/.md file
     output="schema.json",              # optional
 )
 
@@ -81,7 +85,24 @@ results = extract(["jan.txt", "feb.txt"], schema=schema, output="results.json")
 
 # Override size limit
 result = extract("big.txt", schema=schema, max_chars=500_000)
+
+# Sectionized extraction with Text — pass raw text slices directly
+pages = open("statement.txt").read().split("\f")   # split on form-feed
+result = extract(
+    Text("".join(pages[4:8]), name="holdings"),
+    schema=holdings_schema,
+)
+
+# Multiple Text sections → {name: dict}
+results = extract(
+    [Text(holdings_text, name="holdings"), Text(activity_text, name="activity")],
+    schema=combined_schema,
+)
 ```
+
+### The `Text` class
+
+`Text(content, name="<text>")` wraps a raw string so it can be passed anywhere a file path is accepted. The `name` is used as the dict key in multi-input results and in log messages. This is the primary mechanism for sectionized extraction (slicing a document before calling `extract()`).
 
 ---
 
@@ -122,11 +143,18 @@ Every data field has a sibling `<field>_confidence` field (0–1 float) when `ex
 - `0.4` = inferred / uncertain
 - `0.0` = not found (field will be `null`)
 
-### Phase 1 — all sample text is sent
-All text from all sample files is sent to the LLM. There is no internal sampling or page limiting — the user selects which files to use as samples.
+### Two-pass schema generation (Phase 1)
+
+Schema generation uses two LLM calls:
+
+1. **Pass 1 — structural analysis**: the LLM is asked to read the sample text and produce a detailed plain-text analysis (sections, data patterns, array fields, nesting, period/YTD variants). The prompt explicitly lists what to cover so the model doesn't skip sections.
+
+2. **Pass 2 — schema design**: the analysis from Pass 1 is fed to a second prompt that generates the JSON schema. By separating "understand the document" from "design the schema", each pass is a simpler task and the resulting schema is more complete and correctly structured.
+
+All sample text is sent to Pass 1. There is no internal sampling or page limiting — the user selects which files to use as samples.
 
 ### Invalid JSON retry
-If Phase 1 returns malformed JSON, retry once with an error-correction prompt before raising.
+If Pass 2 returns malformed JSON, the conversation is extended with an error-correction prompt and the model retries once. If the retry also fails, a `ValueError` is raised.
 
 ---
 
@@ -195,6 +223,8 @@ pytest tests/
 
 Tests mock all LLM calls. Cover:
 - Schema JSON parsing and validation
+- Two-pass schema generation (analysis call + schema call, retry on bad JSON)
 - Size limit enforcement
-- Config loading from YAML + env var override
-- Python API (single vs multiple input return shapes)
+- Config defaults and env var overrides (`TEXTGLEANER__LLM__*`, `TEXTGLEANER__EXTRACTION__*`)
+- `LLMClient` kwarg precedence over env vars
+- Python public API: single vs multiple inputs, `Text` instances, `base_url` kwarg passthrough

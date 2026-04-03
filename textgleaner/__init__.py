@@ -171,7 +171,7 @@ def _resolve_input(item: Union[PathLike, Text]) -> _TextPair:
 def _resolve_description(description: Union[str, PathLike]) -> str:
     import yaml
     p = Path(description) if not isinstance(description, str) else None
-    if p is None:
+    if p is None and "\n" not in description and len(description) < 512:
         candidate = Path(description)
         if candidate.exists() and candidate.is_file():
             p = candidate
