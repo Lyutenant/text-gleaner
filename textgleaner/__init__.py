@@ -9,6 +9,90 @@ from .extractor import extract as _extract
 PathLike = Union[str, Path]
 
 
+class Config:
+    """Holds LLM and extraction configuration for textgleaner.
+
+    Values set here take priority over environment variables, and are
+    overridden by any explicit kwargs passed directly to :func:`extract`
+    or :func:`generate_schema`.
+
+    Usage::
+
+        from textgleaner import Config, extract
+
+        # Load from a YAML file
+        cfg = Config.from_yaml("config.yaml")
+
+        # Or set values directly in code
+        cfg = Config(base_url="http://myserver:11434", model="qwen3:30b")
+
+        # Pass to functions — replaces 6 individual kwargs
+        result = extract("doc.txt", schema=schema, config=cfg)
+    """
+
+    def __init__(
+        self,
+        *,
+        base_url: Union[str, None] = None,
+        model: Union[str, None] = None,
+        api_key: Union[str, None] = None,
+        temperature: Union[float, None] = None,
+        max_tokens: Union[int, None] = None,
+        timeout: Union[int, None] = None,
+        confidence_scores: Union[bool, None] = None,
+        max_chars: Union[int, None] = None,
+    ):
+        self.base_url = base_url
+        self.model = model
+        self.api_key = api_key
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+        self.timeout = timeout
+        self.confidence_scores = confidence_scores
+        self.max_chars = max_chars
+
+    @classmethod
+    def from_yaml(cls, path: PathLike) -> "Config":
+        """Load configuration from a YAML file.
+
+        The YAML should follow this structure::
+
+            llm:
+              base_url: "http://localhost:11434"
+              model: "qwen3:30b"
+              api_key: "local"
+              temperature: 0.2
+              max_tokens: 32768
+              timeout_seconds: 1800
+
+            extraction:
+              confidence_scores: true
+              max_chars: 200000
+
+        Args:
+            path: Path to the YAML config file. Raises :exc:`FileNotFoundError`
+                  if the file does not exist.
+        """
+        import yaml
+        p = Path(path)
+        if not p.exists():
+            raise FileNotFoundError(f"Config file not found: {p}")
+        with p.open() as f:
+            data = yaml.safe_load(f) or {}
+        llm = data.get("llm", {})
+        ext = data.get("extraction", {})
+        return cls(
+            base_url=llm.get("base_url"),
+            model=llm.get("model"),
+            api_key=llm.get("api_key"),
+            temperature=llm.get("temperature"),
+            max_tokens=llm.get("max_tokens"),
+            timeout=llm.get("timeout_seconds"),
+            confidence_scores=ext.get("confidence_scores"),
+            max_chars=ext.get("max_chars"),
+        )
+
+
 class Text:
     """Wraps a raw text string for use as input to extract() or generate_schema().
 
@@ -39,11 +123,29 @@ class Text:
 _TextPair = tuple[str, str]
 
 
+def _merge_config(config: Union[Config, None], **kwargs) -> dict:
+    """Merge a Config object with explicit kwargs. Explicit kwargs take priority."""
+    merged: dict = {}
+    if config is not None:
+        for attr in (
+            "base_url", "model", "api_key", "temperature",
+            "max_tokens", "timeout", "confidence_scores", "max_chars",
+        ):
+            val = getattr(config, attr, None)
+            if val is not None:
+                merged[attr] = val
+    for k, v in kwargs.items():
+        if v is not None:
+            merged[k] = v
+    return merged
+
+
 def generate_schema(
     samples: Union[PathLike, Text, list[Union[PathLike, Text]]],
     description: Union[str, PathLike],
     output: Union[PathLike, None] = None,
     *,
+    config: Union[Config, None] = None,
     confidence_scores: Union[bool, None] = None,
     base_url: Union[str, None] = None,
     model: Union[str, None] = None,
@@ -62,15 +164,17 @@ def generate_schema(
                      or a path to a .yaml / .md description file.
         output: Optional path to write the schema JSON. If omitted, schema is
                 returned but not saved.
+        config: A :class:`Config` instance (from ``Config.from_yaml()`` or
+                ``Config(...)``). Individual kwargs below override config values.
         confidence_scores: Include _confidence sibling fields in the schema.
-                           Defaults to TEXTGLEANER__EXTRACTION__CONFIDENCE_SCORES
+                           Overrides config. Defaults to TEXTGLEANER__EXTRACTION__CONFIDENCE_SCORES
                            env var, or True.
-        base_url: LLM server base URL. Defaults to TEXTGLEANER__LLM__BASE_URL.
-        model: Model name. Defaults to TEXTGLEANER__LLM__MODEL.
-        api_key: API key. Defaults to TEXTGLEANER__LLM__API_KEY.
-        temperature: Sampling temperature. Defaults to TEXTGLEANER__LLM__TEMPERATURE.
-        max_tokens: Max tokens to generate. Defaults to TEXTGLEANER__LLM__MAX_TOKENS.
-        timeout: Request timeout in seconds. Defaults to TEXTGLEANER__LLM__TIMEOUT_SECONDS.
+        base_url: LLM server base URL. Overrides config. Defaults to TEXTGLEANER__LLM__BASE_URL.
+        model: Model name. Overrides config. Defaults to TEXTGLEANER__LLM__MODEL.
+        api_key: API key. Overrides config. Defaults to TEXTGLEANER__LLM__API_KEY.
+        temperature: Sampling temperature. Overrides config. Defaults to TEXTGLEANER__LLM__TEMPERATURE.
+        max_tokens: Max tokens to generate. Overrides config. Defaults to TEXTGLEANER__LLM__MAX_TOKENS.
+        timeout: Request timeout in seconds. Overrides config. Defaults to TEXTGLEANER__LLM__TIMEOUT_SECONDS.
 
     Returns:
         The generated schema as a dict.
@@ -81,10 +185,8 @@ def generate_schema(
     desc_str = _resolve_description(description)
     out_path = Path(output) if output is not None else None
 
-    return _generate_schema(
-        sample_pairs,
-        desc_str,
-        out_path,
+    resolved = _merge_config(
+        config,
         confidence_scores=confidence_scores,
         base_url=base_url,
         model=model,
@@ -92,6 +194,18 @@ def generate_schema(
         temperature=temperature,
         max_tokens=max_tokens,
         timeout=timeout,
+    )
+    return _generate_schema(
+        sample_pairs,
+        desc_str,
+        out_path,
+        confidence_scores=resolved.get("confidence_scores"),
+        base_url=resolved.get("base_url"),
+        model=resolved.get("model"),
+        api_key=resolved.get("api_key"),
+        temperature=resolved.get("temperature"),
+        max_tokens=resolved.get("max_tokens"),
+        timeout=resolved.get("timeout"),
     )
 
 
@@ -101,6 +215,7 @@ def extract(
     output: Union[PathLike, None] = None,
     max_chars: Union[int, None] = None,
     *,
+    config: Union[Config, None] = None,
     base_url: Union[str, None] = None,
     model: Union[str, None] = None,
     api_key: Union[str, None] = None,
@@ -116,15 +231,17 @@ def extract(
                 (str or Path) or a :class:`Text` instance containing raw text.
         schema: The extraction schema as a dict, or a path to a schema .json file.
         output: Optional path to write the result JSON.
-        max_chars: Max characters per input before raising an error.
-                   Defaults to TEXTGLEANER__EXTRACTION__MAX_CHARS, or 200,000.
+        max_chars: Max characters per input before raising an error. Overrides
+                   config. Defaults to TEXTGLEANER__EXTRACTION__MAX_CHARS, or 200,000.
                    Set to 0 to disable the limit.
-        base_url: LLM server base URL. Defaults to TEXTGLEANER__LLM__BASE_URL.
-        model: Model name. Defaults to TEXTGLEANER__LLM__MODEL.
-        api_key: API key. Defaults to TEXTGLEANER__LLM__API_KEY.
-        temperature: Sampling temperature. Defaults to TEXTGLEANER__LLM__TEMPERATURE.
-        max_tokens: Max tokens to generate. Defaults to TEXTGLEANER__LLM__MAX_TOKENS.
-        timeout: Request timeout in seconds. Defaults to TEXTGLEANER__LLM__TIMEOUT_SECONDS.
+        config: A :class:`Config` instance (from ``Config.from_yaml()`` or
+                ``Config(...)``). Individual kwargs below override config values.
+        base_url: LLM server base URL. Overrides config. Defaults to TEXTGLEANER__LLM__BASE_URL.
+        model: Model name. Overrides config. Defaults to TEXTGLEANER__LLM__MODEL.
+        api_key: API key. Overrides config. Defaults to TEXTGLEANER__LLM__API_KEY.
+        temperature: Sampling temperature. Overrides config. Defaults to TEXTGLEANER__LLM__TEMPERATURE.
+        max_tokens: Max tokens to generate. Overrides config. Defaults to TEXTGLEANER__LLM__MAX_TOKENS.
+        timeout: Request timeout in seconds. Overrides config. Defaults to TEXTGLEANER__LLM__TIMEOUT_SECONDS.
 
     Returns:
         For a single input: the extracted data dict.
@@ -145,11 +262,8 @@ def extract(
 
     out_path = Path(output) if output is not None else None
 
-    return _extract(
-        input_pairs,
-        schema_dict,
-        out_path,
-        single,
+    resolved = _merge_config(
+        config,
         max_chars=max_chars,
         base_url=base_url,
         model=model,
@@ -157,6 +271,19 @@ def extract(
         temperature=temperature,
         max_tokens=max_tokens,
         timeout=timeout,
+    )
+    return _extract(
+        input_pairs,
+        schema_dict,
+        out_path,
+        single,
+        max_chars=resolved.get("max_chars"),
+        base_url=resolved.get("base_url"),
+        model=resolved.get("model"),
+        api_key=resolved.get("api_key"),
+        temperature=resolved.get("temperature"),
+        max_tokens=resolved.get("max_tokens"),
+        timeout=resolved.get("timeout"),
     )
 
 

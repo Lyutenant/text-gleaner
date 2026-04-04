@@ -10,3 +10,5 @@ venv/
 output/
 results/
 sandbox/
+.DS_Store
+.pdfetch_cache/

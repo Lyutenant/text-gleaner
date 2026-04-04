@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class LLMConfig(BaseSettings):
-    base_url: str = "http://localhost:8080"
+    base_url: str = "http://localhost:11434"
     model: str = "qwen3-235b"
     api_key: str = "local"
     temperature: float = 0.2

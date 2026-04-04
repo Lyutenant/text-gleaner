@@ -11,15 +11,6 @@ app = typer.Typer(help="textgleaner — structured data extraction from text via
 logging.basicConfig(format="%(levelname)s %(name)s %(message)s", level=logging.INFO)
 
 
-def _load_yaml_config(config_path: Path) -> dict:
-    """Load config.yaml if it exists; return empty dict otherwise."""
-    if config_path.exists():
-        import yaml
-        with config_path.open() as f:
-            return yaml.safe_load(f) or {}
-    return {}
-
-
 @app.command("generate-schema")
 def generate_schema(
     samples: List[Path] = typer.Option(..., help="One or more sample text files"),
@@ -28,7 +19,7 @@ def generate_schema(
     config: Path = typer.Option(Path("config.yaml"), help="Config YAML file", show_default=True),
 ) -> None:
     """Phase 1: Generate a JSON extraction schema from sample text files."""
-    from textgleaner import generate_schema as _gen
+    from textgleaner import Config, generate_schema as _gen
 
     for p in samples:
         if not p.exists():
@@ -38,21 +29,13 @@ def generate_schema(
         typer.echo(f"Error: description file does not exist: {description}", err=True)
         raise typer.Exit(1)
 
-    cfg = _load_yaml_config(config)
-    llm = cfg.get("llm", {})
-    ext = cfg.get("extraction", {})
+    cfg = Config.from_yaml(config) if config.exists() else Config()
 
     _gen(
         samples=samples,
         description=description,
         output=output,
-        confidence_scores=ext.get("confidence_scores"),
-        base_url=llm.get("base_url"),
-        model=llm.get("model"),
-        api_key=llm.get("api_key"),
-        temperature=llm.get("temperature"),
-        max_tokens=llm.get("max_tokens"),
-        timeout=llm.get("timeout_seconds"),
+        config=cfg,
     )
 
 
@@ -65,7 +48,7 @@ def extract(
     config: Path = typer.Option(Path("config.yaml"), help="Config YAML file", show_default=True),
 ) -> None:
     """Phase 2: Extract structured data from text files using a schema."""
-    from textgleaner import extract as _extract
+    from textgleaner import Config, extract as _extract
 
     for p in inputs:
         if not p.exists():
@@ -75,21 +58,14 @@ def extract(
         typer.echo(f"Error: schema file does not exist: {schema}", err=True)
         raise typer.Exit(1)
 
-    cfg = _load_yaml_config(config)
-    llm = cfg.get("llm", {})
-    ext = cfg.get("extraction", {})
+    cfg = Config.from_yaml(config) if config.exists() else Config()
 
     result = _extract(
         inputs=inputs,
         schema=schema,
         output=output,
-        max_chars=max_chars or ext.get("max_chars"),
-        base_url=llm.get("base_url"),
-        model=llm.get("model"),
-        api_key=llm.get("api_key"),
-        temperature=llm.get("temperature"),
-        max_tokens=llm.get("max_tokens"),
-        timeout=llm.get("timeout_seconds"),
+        max_chars=max_chars,
+        config=cfg,
     )
     if output is None:
         typer.echo(json.dumps(result, indent=2))

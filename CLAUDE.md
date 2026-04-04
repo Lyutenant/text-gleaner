@@ -33,7 +33,13 @@ extraction:
   max_chars: 200000
 ```
 
-**`config.yaml` is only read by the CLI** (`cli.py` loads it explicitly). The Python API (`generate_schema()`, `extract()`) reads configuration from **environment variables** only (`TEXTGLEANER__LLM__BASE_URL`, `TEXTGLEANER__EXTRACTION__MAX_CHARS`, etc.), or from kwargs passed directly to the function. If you use the Python API and want to load from `config.yaml`, read it yourself and pass the values as kwargs.
+The Python API supports three configuration methods, in priority order (highest first):
+1. **Explicit kwargs** passed directly to `generate_schema()` / `extract()` (e.g. `base_url="..."`)
+2. **`Config` object** passed as `config=` — either `Config.from_yaml("config.yaml")` or `Config(base_url="...", model="...")`
+3. **Environment variables** (`TEXTGLEANER__LLM__BASE_URL`, `TEXTGLEANER__EXTRACTION__MAX_CHARS`, etc.)
+4. **Hardcoded defaults** in `config.py`
+
+The CLI reads `config.yaml` via `Config.from_yaml()` and passes it as `config=`. If no `--config` flag is given, it silently looks for `config.yaml` in the current directory and falls back to env vars / defaults if not found.
 
 **Never hardcode the base URL.** Always load from config.
 
@@ -60,7 +66,7 @@ textgleaner/
 ├── llm_client.py       # thin httpx wrapper; OpenAI-compatible /v1/chat/completions
 ├── schema_generator.py # Phase 1 logic
 ├── extractor.py        # Phase 2 logic
-└── __init__.py         # public Python API: generate_schema(), extract()
+└── __init__.py         # public Python API: Config, generate_schema(), extract(), Text
 ```
 
 ---
@@ -68,37 +74,61 @@ textgleaner/
 ## Public Python API
 
 ```python
-from textgleaner import generate_schema, extract, Text
+from textgleaner import Config, generate_schema, extract, Text
 
-# Phase 1
+# --- Configuration ---
+
+# Option 1: load from YAML
+cfg = Config.from_yaml("config.yaml")
+
+# Option 2: set directly in code
+cfg = Config(base_url="http://localhost:11434", model="qwen3:30b")
+
+# Option 3: no Config object — reads from env vars / defaults
+# (just omit config= from the calls below)
+
+# --- Phase 1: generate schema ---
 schema = generate_schema(
     samples=["jan.txt", "feb.txt"],   # list of paths (str/Path) or Text instances
     description="...",                 # raw string OR path to a .yaml/.md file
     output="schema.json",              # optional
+    config=cfg,
 )
 
-# Phase 2 — single file → flat dict
-result = extract("jan.txt", schema=schema)
+# --- Phase 2: extract ---
 
-# Phase 2 — multiple files → {filename: dict}
-results = extract(["jan.txt", "feb.txt"], schema=schema, output="results.json")
+# Single file → flat dict
+result = extract("jan.txt", schema=schema, config=cfg)
 
-# Override size limit
-result = extract("big.txt", schema=schema, max_chars=500_000)
+# Multiple files → {filename: dict}
+results = extract(["jan.txt", "feb.txt"], schema=schema, output="results.json", config=cfg)
+
+# Override a specific value (explicit kwargs take priority over config)
+result = extract("big.txt", schema=schema, config=cfg, max_chars=500_000)
 
 # Sectionized extraction with Text — pass raw text slices directly
 pages = open("statement.txt").read().split("\f")   # split on form-feed
 result = extract(
     Text("".join(pages[4:8]), name="holdings"),
     schema=holdings_schema,
+    config=cfg,
 )
 
 # Multiple Text sections → {name: dict}
 results = extract(
     [Text(holdings_text, name="holdings"), Text(activity_text, name="activity")],
     schema=combined_schema,
+    config=cfg,
 )
 ```
+
+### The `Config` class
+
+`Config` holds all LLM and extraction settings. Priority order: explicit kwargs > `Config` object > env vars > defaults.
+
+- `Config.from_yaml(path)` — load from a YAML file (raises `FileNotFoundError` if missing)
+- `Config(base_url=..., model=..., ...)` — set values directly in code
+- `Config()` — falls back entirely to env vars and defaults
 
 ### The `Text` class
 
@@ -118,6 +148,11 @@ textgleaner extract \
   --inputs jan.txt feb.txt \
   --schema schema.json \
   --output results.json
+
+# Custom config file (default: config.yaml in cwd, silently ignored if absent)
+textgleaner --config /path/to/myconfig.yaml extract \
+  --inputs statement.txt \
+  --schema schema.json
 ```
 
 ---
@@ -227,4 +262,6 @@ Tests mock all LLM calls. Cover:
 - Size limit enforcement
 - Config defaults and env var overrides (`TEXTGLEANER__LLM__*`, `TEXTGLEANER__EXTRACTION__*`)
 - `LLMClient` kwarg precedence over env vars
+- `Config` class: direct kwargs, `from_yaml()`, missing file, partial YAML
+- `config=` kwarg on public API: values passed through to `LLMClient`, explicit kwarg overrides config
 - Python public API: single vs multiple inputs, `Text` instances, `base_url` kwarg passthrough
