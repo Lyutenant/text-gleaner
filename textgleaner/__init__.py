@@ -5,6 +5,7 @@ from typing import Union
 
 from .schema_generator import generate_schema as _generate_schema
 from .extractor import extract as _extract
+from .reporter import summarize as _summarize, write_csv, write_excel, write_summary_csv
 
 PathLike = Union[str, Path]
 
@@ -277,6 +278,7 @@ def extract(
             schema_dict = _json.load(f)
 
     out_path = Path(output) if output is not None else None
+    non_json = out_path is not None and out_path.suffix in (".csv", ".xlsx")
 
     resolved = _merge_config(
         config,
@@ -289,10 +291,12 @@ def extract(
         max_tokens=max_tokens,
         timeout=timeout,
     )
-    return _extract(
+    # For CSV/Excel we collect results first, then write ourselves.
+    # For JSON we let _extract() write directly.
+    results = _extract(
         input_pairs,
         schema_dict,
-        out_path,
+        None if non_json else out_path,
         single,
         max_chars=resolved.get("max_chars"),
         extraction_method=resolved.get("extraction_method"),
@@ -303,6 +307,40 @@ def extract(
         max_tokens=resolved.get("max_tokens"),
         timeout=resolved.get("timeout"),
     )
+
+    if non_json and out_path is not None:
+        # Normalise to {name: dict} even for single-input results
+        results_dict = results if not single else {input_pairs[0][1]: results}
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        if out_path.suffix == ".csv":
+            write_csv(results_dict, out_path)
+        else:
+            write_excel(results_dict, out_path)
+
+    return results
+
+
+def summarize(
+    results: dict,
+    output: Union[PathLike, None] = None,
+) -> dict:
+    """Compute per-field null-rate and average confidence from extract() results.
+
+    Args:
+        results: The dict returned by :func:`extract` for multiple inputs —
+                 ``{name: extracted_dict, ...}``.
+        output: Optional path to write the summary. A ``.csv`` extension writes
+                a CSV file with columns ``field``, ``null_rate``, ``avg_confidence``.
+
+    Returns:
+        ``{field_name: {"null_rate": float, "avg_confidence": float | None}, ...}``
+    """
+    summary = _summarize(results)
+    if output is not None:
+        p = Path(output)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        write_summary_csv(summary, p)
+    return summary
 
 
 def _resolve_input(item: Union[PathLike, Text]) -> _TextPair:

@@ -65,7 +65,8 @@ textgleaner/
 ├── llm_client.py       # thin httpx wrapper; OpenAI-compatible /v1/chat/completions
 ├── schema_generator.py # Phase 1 logic
 ├── extractor.py        # Phase 2 logic: _extract_one_tool_call, _extract_one_structured
-└── __init__.py         # public Python API: Config, generate_schema(), extract(), Text
+├── reporter.py         # summarize(), write_csv(), write_excel(), write_summary_csv()
+└── __init__.py         # public Python API: Config, generate_schema(), extract(), summarize(), Text
 ```
 
 ---
@@ -271,6 +272,7 @@ Tests mock all LLM calls. Cover:
 - `Config` class: direct kwargs, `from_yaml()`, missing file, partial YAML
 - `config=` kwarg on public API: values passed through to `LLMClient`, explicit kwarg overrides config
 - `extraction_method`: tool_call path, structured_output path, response_format payload shape, markdown fence stripping, auto routing (success, ValueError fallback, HTTP 400 fallback, HTTP 500 re-raise)
+- `reporter`: summarize() null-rate/confidence, CSV output, empty list as null, confidence field exclusion, public summarize() with file output, extract() CSV output integration
 - Python public API: single vs multiple inputs, `Text` instances, `base_url` kwarg passthrough
 
 ---
@@ -287,7 +289,7 @@ Items suggested but not yet implemented, roughly in priority order:
 ### Medium-term
 - [ ] **Retry on low-confidence fields** — after extraction, detect fields with confidence ≤ 0.4 and re-prompt with only those fields; one targeted follow-up call often recovers missed values
 - [ ] **Schema validation / dry-run** — a `validate` command that runs extraction and reports which fields came back null or low-confidence; helps users iterate on their schema before a full batch run
-- [ ] **Batch extraction with summary report** — `extract` over a directory of files with CSV/Excel output option and a per-field null-rate summary
+- [x] **Batch extraction with summary report** — `--inputs-dir` in CLI; output format inferred from extension (`.json`/`.csv`/`.xlsx`); `summarize()` computes per-field null-rate and avg confidence; `--report` writes summary CSV
 - [x] **Make `auto` mode smarter** — tries `tool_call` first; falls back to `structured_output` on `ValueError`, `JSONDecodeError`, or `HTTP 400/422`; re-raises timeouts and `HTTP 5xx`
 
 ### Longer-term
