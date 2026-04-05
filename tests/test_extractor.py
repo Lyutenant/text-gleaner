@@ -384,6 +384,136 @@ class TestRetryLowConfidence:
         assert mock_client.chat.call_count == 1
 
 
+class TestOnResult:
+    def _schema(self):
+        return {
+            "name": "extract_data",
+            "description": "Test",
+            "parameters": {"type": "object", "properties": {
+                "value": {"type": ["string", "null"], "description": "Value"},
+            }},
+        }
+
+    def test_callback_called_once_per_input(self):
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        mock_client.get_tool_arguments.side_effect = [{"value": "a"}, {"value": "b"}]
+        calls = []
+
+        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+            extract(
+                [("text1", "doc1.txt"), ("text2", "doc2.txt")],
+                self._schema(), None, single=False,
+                on_result=lambda name, result: calls.append((name, result)),
+            )
+
+        assert len(calls) == 2
+        assert calls[0] == ("doc1.txt", {"value": "a"})
+        assert calls[1] == ("doc2.txt", {"value": "b"})
+
+    def test_callback_called_in_order(self):
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        mock_client.get_tool_arguments.side_effect = [
+            {"value": "first"}, {"value": "second"}, {"value": "third"},
+        ]
+        order = []
+
+        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+            extract(
+                [("t1", "a.txt"), ("t2", "b.txt"), ("t3", "c.txt")],
+                self._schema(), None, single=False,
+                on_result=lambda name, _: order.append(name),
+            )
+
+        assert order == ["a.txt", "b.txt", "c.txt"]
+
+    def test_no_callback_by_default(self):
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        mock_client.get_tool_arguments.return_value = {"value": "x"}
+
+        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+            result = extract([("text", "doc.txt")], self._schema(), None, single=True)
+
+        assert result == {"value": "x"}
+
+    def test_callback_for_single_input(self):
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        mock_client.get_tool_arguments.return_value = {"value": "z"}
+        calls = []
+
+        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+            extract(
+                [("text", "doc.txt")], self._schema(), None, single=True,
+                on_result=lambda name, result: calls.append((name, result)),
+            )
+
+        assert calls == [("doc.txt", {"value": "z"})]
+
+    def test_callback_receives_post_retry_result(self):
+        """Callback fires after confidence_retry, so it gets the final improved result."""
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        schema = {
+            "name": "extract_data", "description": "",
+            "parameters": {"type": "object", "properties": {
+                "value": {"type": ["string", "null"]},
+                "value_confidence": {"type": "number"},
+            }},
+        }
+        # Initial: low confidence; retry: improved
+        mock_client.get_tool_arguments.side_effect = [
+            {"value": None, "value_confidence": 0.0},   # initial
+            {"value": "found", "value_confidence": 0.9}, # retry
+        ]
+        calls = []
+
+        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+            extract(
+                [("text", "doc.txt")], schema, None, single=True,
+                confidence_retry=True,
+                on_result=lambda name, result: calls.append(result),
+            )
+
+        # Callback should receive the improved result
+        assert calls[0]["value"] == "found"
+        assert calls[0]["value_confidence"] == 0.9
+
+    def test_callback_exception_propagates(self):
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        mock_client.get_tool_arguments.return_value = {"value": "x"}
+
+        def bad_callback(name, result):
+            raise RuntimeError("callback error")
+
+        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+            with pytest.raises(RuntimeError, match="callback error"):
+                extract(
+                    [("text", "doc.txt")], self._schema(), None, single=True,
+                    on_result=bad_callback,
+                )
+
+    def test_public_api_on_result(self):
+        """on_result kwarg works through the public extract() function."""
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        mock_client.get_tool_arguments.side_effect = [{"value": "a"}, {"value": "b"}]
+        calls = []
+
+        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+            from textgleaner import extract, Text
+            extract(
+                [Text("t1", name="s1"), Text("t2", name="s2")],
+                schema=self._schema(),
+                on_result=lambda name, result: calls.append(name),
+            )
+
+        assert calls == ["s1", "s2"]
+
+
 class TestPublicAPI:
     def _schema(self):
         return {

@@ -3,7 +3,7 @@ import json
 import logging
 import re
 from pathlib import Path  # used only for output_path
-from typing import Any
+from typing import Any, Callable
 
 import httpx
 
@@ -244,6 +244,7 @@ def extract(
     max_tokens: int | None = None,
     timeout: int | None = None,
     model_profile: str | None = None,
+    on_result: Callable[[str, dict], None] | None = None,
 ) -> dict:
     cfg = ExtractionConfig()
     effective_max = max_chars if max_chars is not None else cfg.max_chars
@@ -274,6 +275,8 @@ def extract(
         if effective_retry:
             data = _retry_low_confidence(client, schema, text, name, data, effective_method)
         results[name] = data
+        if on_result is not None:
+            on_result(name, data)
 
     if output_path is not None:
         output_path.parent.mkdir(parents=True, exist_ok=True)

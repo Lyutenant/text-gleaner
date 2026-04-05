@@ -318,4 +318,4 @@ Items suggested but not yet implemented, roughly in priority order:
 ### Longer-term
 - [x] **Schema versioning / refinement** — a `refine-schema` command that takes an existing schema + new samples and patches it, without re-running Phase 1 from scratch
 - [x] **Model profiles** — abstract Qwen3-specific workarounds (`extra_body: {think: false}`) into named model profiles so other models (Llama, Mistral, etc.) work better out of the box
-- [ ] **Streaming extraction output** — progress callback / hook so callers can process partial results as each input completes, rather than waiting for the full batch
+- [x] **Streaming extraction output** — progress callback / hook so callers can process partial results as each input completes, rather than waiting for the full batch

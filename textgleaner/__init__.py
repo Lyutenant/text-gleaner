@@ -1,7 +1,7 @@
 from __future__ import annotations
 import json as _json
 from pathlib import Path
-from typing import Union
+from typing import Callable, Union
 
 from .schema_generator import generate_schema as _generate_schema
 from .schema_refiner import refine_schema as _refine_schema
@@ -316,6 +316,7 @@ def extract(
     max_chars: Union[int, None] = None,
     *,
     config: Union[Config, None] = None,
+    on_result: Union[Callable[[str, dict], None], None] = None,
     extraction_method: Union[str, None] = None,
     confidence_retry: Union[bool, None] = None,
     model_profile: Union[str, None] = None,
@@ -400,6 +401,7 @@ def extract(
         extraction_method=resolved.get("extraction_method"),
         confidence_retry=resolved.get("confidence_retry"),
         model_profile=resolved.get("model_profile"),
+        on_result=on_result,
         base_url=resolved.get("base_url"),
         model=resolved.get("model"),
         api_key=resolved.get("api_key"),

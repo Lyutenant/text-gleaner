@@ -123,12 +123,23 @@ def extract(
 
     cfg = Config.from_yaml(config) if config.exists() else Config()
 
+    # Show per-file progress when processing multiple inputs.
+    n_inputs = len(inputs)
+    pad = len(str(n_inputs))
+    counter = [0]  # mutable cell for closure
+
+    def _progress(name: str, result: dict) -> None:
+        counter[0] += 1
+        n_fields = len([k for k in result if not k.endswith("_confidence")])
+        typer.echo(f"  [{counter[0]:{pad}d}/{n_inputs}] {name}  ({n_fields} fields)")
+
     result = _extract(
         inputs=inputs,
         schema=schema,
         output=output,
         max_chars=max_chars,
         config=cfg,
+        on_result=_progress if n_inputs > 1 else None,
     )
 
     if report is not None:
