@@ -10,6 +10,46 @@ from .config import LLMConfig
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Model profiles
+# ---------------------------------------------------------------------------
+
+# Each profile maps to extra fields merged into the /v1/chat/completions payload.
+# Fields present here are sent to the server; absent keys are not sent at all.
+PROFILES: dict[str, dict] = {
+    "qwen3": {
+        # Disable extended "thinking" mode to prevent token budget exhaustion
+        # on large documents. Qwen3-specific — ignored by other models.
+        "extra_body": {"think": False},
+    },
+    "default": {},
+}
+
+
+def _auto_detect_profile(model: str) -> str:
+    """Infer a profile name from the model name string."""
+    name = model.lower()
+    if "qwen3" in name:
+        return "qwen3"
+    return "default"
+
+
+def _resolve_profile_payload(model: str, profile: str | None) -> dict:
+    """Return the extra payload fields for the given model and profile.
+
+    If *profile* is None, auto-detects from the model name.
+    Raises ValueError for unknown profile names.
+    """
+    if not profile:
+        profile = _auto_detect_profile(model)
+    if profile not in PROFILES:
+        raise ValueError(
+            f"Unknown model_profile '{profile}'. "
+            f"Valid profiles: {sorted(PROFILES)}"
+        )
+    logger.debug("model=%s profile=%s", model, profile)
+    return dict(PROFILES[profile])
+
 
 class LLMClient:
     def __init__(
@@ -20,6 +60,7 @@ class LLMClient:
         temperature: float | None = None,
         max_tokens: int | None = None,
         timeout: int | None = None,
+        model_profile: str | None = None,
     ):
         defaults = LLMConfig()
         self.base_url = (base_url or defaults.base_url).rstrip("/")
@@ -28,6 +69,8 @@ class LLMClient:
         self.temperature = temperature if temperature is not None else defaults.temperature
         self.max_tokens = max_tokens if max_tokens is not None else defaults.max_tokens
         self.timeout = timeout if timeout is not None else defaults.timeout_seconds
+        # None means "auto-detect from model name"; explicit string overrides.
+        self.model_profile = model_profile if model_profile is not None else defaults.model_profile
 
     def chat(
         self,
@@ -36,13 +79,14 @@ class LLMClient:
         tool_choice: dict | str | None = None,
         response_format: dict | None = None,
     ) -> dict:
+        profile_payload = _resolve_profile_payload(self.model, self.model_profile)
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
             "stream": True,   # streaming keeps the connection alive over slow/remote links
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
-            "extra_body": {"think": False},
+            **profile_payload,
         }
         if tools:
             payload["tools"] = tools

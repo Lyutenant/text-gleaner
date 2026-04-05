@@ -25,6 +25,7 @@ llm:
   temperature: 0.2
   max_tokens: 32768
   timeout_seconds: 1800
+  model_profile: qwen3  # optional; auto-detected from model name if omitted
 
 extraction:
   confidence_scores: true
@@ -47,9 +48,20 @@ The CLI reads `config.yaml` via `Config.from_yaml()` and passes it as `config=`.
 
 Ollama exposes two APIs. The native `/api/chat` silently ignores `tool_choice`, so the model freely returns plain-text instead of a tool call. The OpenAI-compatible `/v1/chat/completions` properly enforces `tool_choice`. Always use the `/v1/` endpoint.
 
+### Model profiles
+
+Model-specific payload fields are controlled by named profiles in `llm_client.py`:
+
+| Profile | Extra payload | Auto-detected when |
+|---------|--------------|-------------------|
+| `qwen3` | `extra_body: {think: false}` | model name contains `"qwen3"` |
+| `default` | *(nothing extra)* | all other models |
+
+The profile is auto-detected from the model name. Override with `model_profile` in config YAML, the `Config` class, the `model_profile=` kwarg, or the `TEXTGLEANER__LLM__MODEL_PROFILE` env var.
+
 ### Qwen3 thinking mode
 
-Qwen3 models have an extended reasoning ("thinking") mode that consumes tokens before generating content. It is disabled by sending `"extra_body": {"think": false}` in the request payload to prevent token budget exhaustion on large documents.
+Qwen3 models have an extended reasoning ("thinking") mode that consumes tokens before generating content. It is disabled via the `qwen3` profile (`"extra_body": {"think": false}`) to prevent token budget exhaustion on large documents. Non-Qwen3 models do not receive this field.
 
 ### Streaming to avoid TCP timeouts
 
@@ -305,5 +317,5 @@ Items suggested but not yet implemented, roughly in priority order:
 
 ### Longer-term
 - [x] **Schema versioning / refinement** — a `refine-schema` command that takes an existing schema + new samples and patches it, without re-running Phase 1 from scratch
-- [ ] **Model profiles** — abstract Qwen3-specific workarounds (`extra_body: {think: false}`) into named model profiles so other models (Llama, Mistral, etc.) work better out of the box
+- [x] **Model profiles** — abstract Qwen3-specific workarounds (`extra_body: {think: false}`) into named model profiles so other models (Llama, Mistral, etc.) work better out of the box
 - [ ] **Streaming extraction output** — progress callback / hook so callers can process partial results as each input completes, rather than waiting for the full batch

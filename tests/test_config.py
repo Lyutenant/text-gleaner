@@ -148,3 +148,134 @@ class TestLLMClient:
         from textgleaner.llm_client import LLMClient
         client = LLMClient(base_url="http://host:8080/")
         assert client.base_url == "http://host:8080"
+
+
+class TestModelProfiles:
+    def test_auto_detect_qwen3(self):
+        from textgleaner.llm_client import _auto_detect_profile
+        assert _auto_detect_profile("qwen3:30b") == "qwen3"
+        assert _auto_detect_profile("Qwen3-235B") == "qwen3"
+
+    def test_auto_detect_default_for_other_models(self):
+        from textgleaner.llm_client import _auto_detect_profile
+        assert _auto_detect_profile("llama3:8b") == "default"
+        assert _auto_detect_profile("mistral:7b") == "default"
+        assert _auto_detect_profile("phi4") == "default"
+
+    def test_resolve_qwen3_includes_extra_body(self):
+        from textgleaner.llm_client import _resolve_profile_payload
+        payload = _resolve_profile_payload("qwen3:30b", None)
+        assert "extra_body" in payload
+        assert payload["extra_body"] == {"think": False}
+
+    def test_resolve_default_no_extra_body(self):
+        from textgleaner.llm_client import _resolve_profile_payload
+        payload = _resolve_profile_payload("llama3:8b", None)
+        assert payload == {}
+
+    def test_explicit_profile_overrides_auto_detect(self):
+        from textgleaner.llm_client import _resolve_profile_payload
+        # Qwen3 model name, but forced to "default" profile
+        payload = _resolve_profile_payload("qwen3:30b", "default")
+        assert "extra_body" not in payload
+
+    def test_explicit_qwen3_profile_on_non_qwen3_model(self):
+        from textgleaner.llm_client import _resolve_profile_payload
+        # Non-Qwen3 model name, but forced to "qwen3" profile
+        payload = _resolve_profile_payload("llama3:8b", "qwen3")
+        assert "extra_body" in payload
+
+    def test_unknown_profile_raises(self):
+        import pytest
+        from textgleaner.llm_client import _resolve_profile_payload
+        with pytest.raises(ValueError, match="Unknown model_profile"):
+            _resolve_profile_payload("some-model", "nonexistent")
+
+    def test_qwen3_chat_payload_includes_extra_body(self):
+        """Integration: LLMClient built with a qwen3 model sends extra_body in payload."""
+        import httpx
+        from unittest.mock import patch, MagicMock
+        from textgleaner.llm_client import LLMClient
+
+        captured = {}
+
+        def fake_stream(method, url, json=None, headers=None):
+            captured["payload"] = json
+            # Return a minimal SSE response
+            mock_resp = MagicMock()
+            mock_resp.is_success = True
+            mock_resp.iter_lines.return_value = ['data: [DONE]']
+            mock_resp.__enter__ = lambda s: mock_resp
+            mock_resp.__exit__ = MagicMock(return_value=False)
+            return mock_resp
+
+        client = LLMClient(
+            base_url="http://localhost:11434",
+            model="qwen3:30b",
+            api_key="local",
+        )
+        with patch.object(client, "chat", wraps=client.chat):
+            with patch("httpx.Client") as MockHttpxClient:
+                mock_httpx = MagicMock()
+                mock_httpx.stream.side_effect = fake_stream
+                mock_httpx.__enter__ = lambda s: mock_httpx
+                mock_httpx.__exit__ = MagicMock(return_value=False)
+                MockHttpxClient.return_value = mock_httpx
+                client.chat([{"role": "user", "content": "hi"}])
+
+        assert "extra_body" in captured["payload"]
+        assert captured["payload"]["extra_body"] == {"think": False}
+
+    def test_default_chat_payload_excludes_extra_body(self):
+        """Integration: LLMClient built with a non-qwen3 model does NOT send extra_body."""
+        from unittest.mock import patch, MagicMock
+        from textgleaner.llm_client import LLMClient
+
+        captured = {}
+
+        def fake_stream(method, url, json=None, headers=None):
+            captured["payload"] = json
+            mock_resp = MagicMock()
+            mock_resp.is_success = True
+            mock_resp.iter_lines.return_value = ['data: [DONE]']
+            mock_resp.__enter__ = lambda s: mock_resp
+            mock_resp.__exit__ = MagicMock(return_value=False)
+            return mock_resp
+
+        client = LLMClient(
+            base_url="http://localhost:11434",
+            model="llama3:8b",
+            api_key="local",
+        )
+        with patch("httpx.Client") as MockHttpxClient:
+            mock_httpx = MagicMock()
+            mock_httpx.stream.side_effect = fake_stream
+            mock_httpx.__enter__ = lambda s: mock_httpx
+            mock_httpx.__exit__ = MagicMock(return_value=False)
+            MockHttpxClient.return_value = mock_httpx
+            client.chat([{"role": "user", "content": "hi"}])
+
+        assert "extra_body" not in captured["payload"]
+
+    def test_model_profile_env_var(self, monkeypatch):
+        monkeypatch.setenv("TEXTGLEANER__LLM__MODEL_PROFILE", "default")
+        from textgleaner.llm_client import LLMClient
+        client = LLMClient(model="qwen3:30b")
+        # Env var forces "default" even for qwen3 model name
+        assert client.model_profile == "default"
+
+    def test_config_model_profile_kwarg(self):
+        from textgleaner import Config
+        cfg = Config(model_profile="default")
+        assert cfg.model_profile == "default"
+
+    def test_config_from_yaml_model_profile(self, tmp_path):
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text(
+            "llm:\n"
+            "  model: llama3:8b\n"
+            "  model_profile: default\n"
+        )
+        from textgleaner import Config
+        cfg = Config.from_yaml(yaml_file)
+        assert cfg.model_profile == "default"

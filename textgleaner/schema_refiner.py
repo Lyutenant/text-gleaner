@@ -188,6 +188,7 @@ def refine_schema(
     temperature: float | None = None,
     max_tokens: int | None = None,
     timeout: int | None = None,
+    model_profile: str | None = None,
 ) -> dict:
     # Auto-detect confidence_scores from the existing schema if not specified.
     if confidence_scores is None:
@@ -200,6 +201,7 @@ def refine_schema(
         temperature=temperature,
         max_tokens=max_tokens,
         timeout=timeout,
+        model_profile=model_profile,
     )
 
     snippets: list[str] = []

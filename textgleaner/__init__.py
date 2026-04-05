@@ -49,6 +49,7 @@ class Config:
         max_chars: Union[int, None] = None,
         extraction_method: Union[str, None] = None,
         confidence_retry: Union[bool, None] = None,
+        model_profile: Union[str, None] = None,
     ):
         self.base_url = base_url
         self.model = model
@@ -60,6 +61,7 @@ class Config:
         self.max_chars = max_chars
         self.extraction_method = extraction_method
         self.confidence_retry = confidence_retry
+        self.model_profile = model_profile
 
     @classmethod
     def from_yaml(cls, path: PathLike) -> "Config":
@@ -103,6 +105,7 @@ class Config:
             max_chars=ext.get("max_chars"),
             extraction_method=ext.get("extraction_method"),
             confidence_retry=ext.get("confidence_retry"),
+            model_profile=llm.get("model_profile"),
         )
 
 
@@ -143,7 +146,7 @@ def _merge_config(config: Union[Config, None], **kwargs) -> dict:
         for attr in (
             "base_url", "model", "api_key", "temperature",
             "max_tokens", "timeout", "confidence_scores", "max_chars",
-            "extraction_method", "confidence_retry",
+            "extraction_method", "confidence_retry", "model_profile",
         ):
             val = getattr(config, attr, None)
             if val is not None:
@@ -161,6 +164,7 @@ def generate_schema(
     *,
     config: Union[Config, None] = None,
     confidence_scores: Union[bool, None] = None,
+    model_profile: Union[str, None] = None,
     base_url: Union[str, None] = None,
     model: Union[str, None] = None,
     api_key: Union[str, None] = None,
@@ -202,6 +206,7 @@ def generate_schema(
     resolved = _merge_config(
         config,
         confidence_scores=confidence_scores,
+        model_profile=model_profile,
         base_url=base_url,
         model=model,
         api_key=api_key,
@@ -214,6 +219,7 @@ def generate_schema(
         desc_str,
         out_path,
         confidence_scores=resolved.get("confidence_scores"),
+        model_profile=resolved.get("model_profile"),
         base_url=resolved.get("base_url"),
         model=resolved.get("model"),
         api_key=resolved.get("api_key"),
@@ -230,6 +236,7 @@ def refine_schema(
     *,
     config: Union[Config, None] = None,
     confidence_scores: Union[bool, None] = None,
+    model_profile: Union[str, None] = None,
     base_url: Union[str, None] = None,
     model: Union[str, None] = None,
     api_key: Union[str, None] = None,
@@ -279,6 +286,7 @@ def refine_schema(
     resolved = _merge_config(
         config,
         confidence_scores=confidence_scores,
+        model_profile=model_profile,
         base_url=base_url,
         model=model,
         api_key=api_key,
@@ -291,6 +299,7 @@ def refine_schema(
         sample_pairs,
         out_path,
         confidence_scores=resolved.get("confidence_scores"),
+        model_profile=resolved.get("model_profile"),
         base_url=resolved.get("base_url"),
         model=resolved.get("model"),
         api_key=resolved.get("api_key"),
@@ -309,6 +318,7 @@ def extract(
     config: Union[Config, None] = None,
     extraction_method: Union[str, None] = None,
     confidence_retry: Union[bool, None] = None,
+    model_profile: Union[str, None] = None,
     base_url: Union[str, None] = None,
     model: Union[str, None] = None,
     api_key: Union[str, None] = None,
@@ -371,6 +381,7 @@ def extract(
         max_chars=max_chars,
         extraction_method=extraction_method,
         confidence_retry=confidence_retry,
+        model_profile=model_profile,
         base_url=base_url,
         model=model,
         api_key=api_key,
@@ -388,6 +399,7 @@ def extract(
         max_chars=resolved.get("max_chars"),
         extraction_method=resolved.get("extraction_method"),
         confidence_retry=resolved.get("confidence_retry"),
+        model_profile=resolved.get("model_profile"),
         base_url=resolved.get("base_url"),
         model=resolved.get("model"),
         api_key=resolved.get("api_key"),

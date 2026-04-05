@@ -243,6 +243,7 @@ def extract(
     temperature: float | None = None,
     max_tokens: int | None = None,
     timeout: int | None = None,
+    model_profile: str | None = None,
 ) -> dict:
     cfg = ExtractionConfig()
     effective_max = max_chars if max_chars is not None else cfg.max_chars
@@ -256,6 +257,7 @@ def extract(
         temperature=temperature,
         max_tokens=max_tokens,
         timeout=timeout,
+        model_profile=model_profile,
     )
 
     results: dict[str, Any] = {}

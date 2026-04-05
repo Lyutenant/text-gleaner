@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -9,6 +10,7 @@ class LLMConfig(BaseSettings):
     temperature: float = 0.2
     max_tokens: int = 4096
     timeout_seconds: int = 120
+    model_profile: Optional[str] = None  # None = auto-detect from model name
 
     model_config = SettingsConfigDict(env_prefix="TEXTGLEANER__LLM__", extra="ignore")
 
