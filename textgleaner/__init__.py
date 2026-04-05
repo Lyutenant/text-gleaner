@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Union
 
 from .schema_generator import generate_schema as _generate_schema
+from .schema_refiner import refine_schema as _refine_schema
 from .extractor import extract as _extract
 from .reporter import (
     summarize as _summarize,
@@ -211,6 +212,83 @@ def generate_schema(
     return _generate_schema(
         sample_pairs,
         desc_str,
+        out_path,
+        confidence_scores=resolved.get("confidence_scores"),
+        base_url=resolved.get("base_url"),
+        model=resolved.get("model"),
+        api_key=resolved.get("api_key"),
+        temperature=resolved.get("temperature"),
+        max_tokens=resolved.get("max_tokens"),
+        timeout=resolved.get("timeout"),
+    )
+
+
+def refine_schema(
+    schema: Union[dict, PathLike],
+    samples: Union[PathLike, Text, list[Union[PathLike, Text]]],
+    output: Union[PathLike, None] = None,
+    *,
+    config: Union[Config, None] = None,
+    confidence_scores: Union[bool, None] = None,
+    base_url: Union[str, None] = None,
+    model: Union[str, None] = None,
+    api_key: Union[str, None] = None,
+    temperature: Union[float, None] = None,
+    max_tokens: Union[int, None] = None,
+    timeout: Union[int, None] = None,
+) -> dict:
+    """
+    Update an existing schema from new sample documents without re-running Phase 1 from scratch.
+
+    Runs a two-pass refinement:
+
+    * **Pass 1** — gap analysis: the LLM compares the new samples against the existing
+      schema and identifies missing fields, type mismatches, structural issues, and
+      description improvements.
+    * **Pass 2** — schema update: the LLM produces the complete updated schema JSON,
+      preserving all existing fields unless the gap analysis recommends a change.
+
+    Confidence score fields (``<field>_confidence`` siblings) are automatically
+    detected from the existing schema and added for any new fields.
+
+    Args:
+        schema: The existing schema as a dict or a path to a ``.json`` file.
+        samples: One or more new sample documents (file paths or :class:`Text` instances).
+        output: Optional path to write the updated schema. If omitted, the schema is
+                returned but not saved.
+        config: :class:`Config` instance.
+        confidence_scores: Override auto-detection of whether to include confidence
+                           fields for new properties.
+        base_url, model, api_key, temperature, max_tokens, timeout:
+            LLM overrides (same as :func:`generate_schema`).
+
+    Returns:
+        The updated schema dict.
+    """
+    if isinstance(schema, dict):
+        schema_dict = schema
+    else:
+        with open(schema) as f:
+            schema_dict = _json.load(f)
+
+    if not isinstance(samples, list):
+        samples = [samples]
+    sample_pairs = [_resolve_input(s) for s in samples]
+    out_path = Path(output) if output is not None else None
+
+    resolved = _merge_config(
+        config,
+        confidence_scores=confidence_scores,
+        base_url=base_url,
+        model=model,
+        api_key=api_key,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        timeout=timeout,
+    )
+    return _refine_schema(
+        schema_dict,
+        sample_pairs,
         out_path,
         confidence_scores=resolved.get("confidence_scores"),
         base_url=resolved.get("base_url"),

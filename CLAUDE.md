@@ -304,6 +304,6 @@ Items suggested but not yet implemented, roughly in priority order:
 - [x] **Make `auto` mode smarter** — tries `tool_call` first; falls back to `structured_output` on `ValueError`, `JSONDecodeError`, or `HTTP 400/422`; re-raises timeouts and `HTTP 5xx`
 
 ### Longer-term
-- [ ] **Schema versioning / refinement** — a `refine-schema` command that takes an existing schema + new samples and patches it, without re-running Phase 1 from scratch
+- [x] **Schema versioning / refinement** — a `refine-schema` command that takes an existing schema + new samples and patches it, without re-running Phase 1 from scratch
 - [ ] **Model profiles** — abstract Qwen3-specific workarounds (`extra_body: {think: false}`) into named model profiles so other models (Llama, Mistral, etc.) work better out of the box
 - [ ] **Streaming extraction output** — progress callback / hook so callers can process partial results as each input completes, rather than waiting for the full batch

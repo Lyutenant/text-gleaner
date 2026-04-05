@@ -39,6 +39,43 @@ def generate_schema(
     )
 
 
+@app.command("refine-schema")
+def refine_schema(
+    schema: Path = typer.Option(..., help="Existing schema JSON to refine"),
+    samples: List[Path] = typer.Option(..., help="One or more new sample text files"),
+    output: Optional[Path] = typer.Option(None, help="Output path (default: overwrites --schema)"),
+    config: Path = typer.Option(Path("config.yaml"), help="Config YAML file", show_default=True),
+) -> None:
+    """Update an existing schema from new sample documents.
+
+    Runs a two-pass refinement: first the LLM compares the new samples against
+    the existing schema (gap analysis), then it produces the complete updated
+    schema JSON preserving all existing fields.
+
+    By default the refined schema is written back to --schema (in-place update).
+    Pass --output to write to a different file instead.
+    """
+    from textgleaner import Config, refine_schema as _refine
+
+    if not schema.exists():
+        typer.echo(f"Error: schema file does not exist: {schema}", err=True)
+        raise typer.Exit(1)
+    for p in samples:
+        if not p.exists():
+            typer.echo(f"Error: sample file does not exist: {p}", err=True)
+            raise typer.Exit(1)
+
+    cfg = Config.from_yaml(config) if config.exists() else Config()
+    out = output if output is not None else schema
+
+    _refine(
+        schema=schema,
+        samples=samples,
+        output=out,
+        config=cfg,
+    )
+
+
 @app.command("extract")
 def extract(
     inputs: List[Path] = typer.Option([], help="One or more text files to extract from"),
