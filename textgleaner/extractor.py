@@ -90,13 +90,22 @@ def _extract_one_structured(client: LLMClient, schema: dict, text: str, filename
         {"role": "system", "content": SYSTEM_PROMPT_STRUCTURED},
         {"role": "user", "content": f"Document text:\n\n{text}"},
     ]
+
+    def _parse(raw: str) -> dict:
+        raw = re.sub(r"^```(?:json)?\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw).strip()
+        return json.loads(raw)
+
     try:
         response = client.chat(messages, response_format=response_format)
         content = client.get_content(response).strip()
-        # Strip markdown code fences if present
-        content = re.sub(r"^```(?:json)?\s*", "", content)
-        content = re.sub(r"\s*```$", "", content).strip()
-        return json.loads(content)
+        if not content:
+            # Some models (e.g. Qwen3) occasionally return empty content with
+            # response_format. Retry once before giving up.
+            logger.warning("filename=%s structured_output returned empty content, retrying", filename)
+            response = client.chat(messages, response_format=response_format)
+            content = client.get_content(response).strip()
+        return _parse(content)
     except Exception as e:
         logger.warning("filename=%s error=%s", filename, e)
         raise
