@@ -33,6 +33,9 @@ Homepage = "https://github.com/Lyutenant/text-gleaner"
 Repository = "https://github.com/Lyutenant/text-gleaner"
 Issues = "https://github.com/Lyutenant/text-gleaner/issues"
 
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
 [project.scripts]
 textgleaner = "textgleaner.cli:app"
 
