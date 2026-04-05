@@ -10,3 +10,8 @@ extraction:
   confidence_scores: true   # include _confidence fields in generated schema
   max_chars: 200000         # max characters per input file; 0 = no limit
                             # env override: TEXTGLEANER__EXTRACTION__MAX_CHARS
+  extraction_method: tool_call  # tool_call (default) | structured_output | auto
+                                # tool_call: forces LLM tool/function call
+                                # structured_output: uses response_format + json_schema
+                                #   (grammar-constrained; better for weaker models)
+                                # auto: same as tool_call for now

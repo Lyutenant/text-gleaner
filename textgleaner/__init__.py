@@ -41,6 +41,7 @@ class Config:
         timeout: Union[int, None] = None,
         confidence_scores: Union[bool, None] = None,
         max_chars: Union[int, None] = None,
+        extraction_method: Union[str, None] = None,
     ):
         self.base_url = base_url
         self.model = model
@@ -50,6 +51,7 @@ class Config:
         self.timeout = timeout
         self.confidence_scores = confidence_scores
         self.max_chars = max_chars
+        self.extraction_method = extraction_method
 
     @classmethod
     def from_yaml(cls, path: PathLike) -> "Config":
@@ -68,6 +70,7 @@ class Config:
             extraction:
               confidence_scores: true
               max_chars: 200000
+              extraction_method: tool_call  # tool_call | structured_output | auto
 
         Args:
             path: Path to the YAML config file. Raises :exc:`FileNotFoundError`
@@ -90,6 +93,7 @@ class Config:
             timeout=llm.get("timeout_seconds"),
             confidence_scores=ext.get("confidence_scores"),
             max_chars=ext.get("max_chars"),
+            extraction_method=ext.get("extraction_method"),
         )
 
 
@@ -130,6 +134,7 @@ def _merge_config(config: Union[Config, None], **kwargs) -> dict:
         for attr in (
             "base_url", "model", "api_key", "temperature",
             "max_tokens", "timeout", "confidence_scores", "max_chars",
+            "extraction_method",
         ):
             val = getattr(config, attr, None)
             if val is not None:
@@ -216,6 +221,7 @@ def extract(
     max_chars: Union[int, None] = None,
     *,
     config: Union[Config, None] = None,
+    extraction_method: Union[str, None] = None,
     base_url: Union[str, None] = None,
     model: Union[str, None] = None,
     api_key: Union[str, None] = None,
@@ -236,6 +242,14 @@ def extract(
                    Set to 0 to disable the limit.
         config: A :class:`Config` instance (from ``Config.from_yaml()`` or
                 ``Config(...)``). Individual kwargs below override config values.
+        extraction_method: ``"tool_call"`` (default), ``"structured_output"``, or
+                           ``"auto"``. Overrides config.
+                           ``tool_call`` — forces a function/tool call; falls back to
+                           content JSON if the model ignores tool_choice.
+                           ``structured_output`` — uses ``response_format`` with
+                           ``json_schema`` (grammar-constrained decoding); works with
+                           models that handle tool_choice poorly.
+                           ``auto`` — same as ``tool_call`` for now.
         base_url: LLM server base URL. Overrides config. Defaults to TEXTGLEANER__LLM__BASE_URL.
         model: Model name. Overrides config. Defaults to TEXTGLEANER__LLM__MODEL.
         api_key: API key. Overrides config. Defaults to TEXTGLEANER__LLM__API_KEY.
@@ -265,6 +279,7 @@ def extract(
     resolved = _merge_config(
         config,
         max_chars=max_chars,
+        extraction_method=extraction_method,
         base_url=base_url,
         model=model,
         api_key=api_key,
@@ -278,6 +293,7 @@ def extract(
         out_path,
         single,
         max_chars=resolved.get("max_chars"),
+        extraction_method=resolved.get("extraction_method"),
         base_url=resolved.get("base_url"),
         model=resolved.get("model"),
         api_key=resolved.get("api_key"),

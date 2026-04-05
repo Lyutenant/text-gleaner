@@ -16,5 +16,6 @@ class LLMConfig(BaseSettings):
 class ExtractionConfig(BaseSettings):
     confidence_scores: bool = True
     max_chars: int = 200_000   # per-file limit; 0 = no limit
+    extraction_method: str = "tool_call"  # tool_call | structured_output | auto
 
     model_config = SettingsConfigDict(env_prefix="TEXTGLEANER__EXTRACTION__", extra="ignore")

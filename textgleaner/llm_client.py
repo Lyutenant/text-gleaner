@@ -34,6 +34,7 @@ class LLMClient:
         messages: list[dict],
         tools: list[dict] | None = None,
         tool_choice: dict | str | None = None,
+        response_format: dict | None = None,
     ) -> dict:
         payload: dict[str, Any] = {
             "model": self.model,
@@ -47,6 +48,8 @@ class LLMClient:
             payload["tools"] = tools
         if tool_choice is not None:
             payload["tool_choice"] = tool_choice
+        if response_format is not None:
+            payload["response_format"] = response_format
 
         url = f"{self.base_url}/v1/chat/completions"
         headers = {"Authorization": f"Bearer {self.api_key}"}

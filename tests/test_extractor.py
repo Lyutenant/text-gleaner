@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from textgleaner.extractor import extract, _check_size
+from textgleaner.extractor import extract, _check_size, _extract_one_tool_call, _extract_one_structured
 
 
 class TestCheckSize:
@@ -86,6 +86,82 @@ class TestExtract:
             result = extract([("x" * 300_000, "doc.txt")], self._schema(), None, single=True, max_chars=0)
 
         assert "account_number" in result
+
+
+class TestExtractionMethods:
+    def _schema(self):
+        return {
+            "name": "extract_data",
+            "description": "Test",
+            "parameters": {"type": "object", "properties": {
+                "value": {"type": ["string", "null"], "description": "Value"},
+            }},
+        }
+
+    def test_tool_call_method(self):
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        mock_client.get_tool_arguments.return_value = {"value": "42"}
+
+        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+            result = extract([("text", "doc.txt")], self._schema(), None, single=True,
+                             extraction_method="tool_call")
+
+        assert result == {"value": "42"}
+        # tool_call path calls get_tool_arguments, not get_content
+        mock_client.get_tool_arguments.assert_called_once()
+        mock_client.get_content.assert_not_called()
+
+    def test_structured_output_method(self):
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        mock_client.get_content.return_value = '{"value": "99"}'
+
+        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+            result = extract([("text", "doc.txt")], self._schema(), None, single=True,
+                             extraction_method="structured_output")
+
+        assert result == {"value": "99"}
+        # structured_output path calls get_content, not get_tool_arguments
+        mock_client.get_content.assert_called_once()
+        mock_client.get_tool_arguments.assert_not_called()
+
+    def test_structured_output_strips_markdown_fences(self):
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        mock_client.get_content.return_value = '```json\n{"value": "42"}\n```'
+
+        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+            result = extract([("text", "doc.txt")], self._schema(), None, single=True,
+                             extraction_method="structured_output")
+
+        assert result == {"value": "42"}
+
+    def test_structured_output_passes_response_format(self):
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        mock_client.get_content.return_value = '{"value": "x"}'
+
+        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+            extract([("text", "doc.txt")], self._schema(), None, single=True,
+                    extraction_method="structured_output")
+
+        _, kwargs = mock_client.chat.call_args
+        assert "response_format" in kwargs
+        assert kwargs["response_format"]["type"] == "json_schema"
+        assert "tools" not in kwargs or kwargs.get("tools") is None
+
+    def test_auto_uses_tool_call_path(self):
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        mock_client.get_tool_arguments.return_value = {"value": "auto"}
+
+        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+            result = extract([("text", "doc.txt")], self._schema(), None, single=True,
+                             extraction_method="auto")
+
+        assert result == {"value": "auto"}
+        mock_client.get_tool_arguments.assert_called_once()
 
 
 class TestPublicAPI:

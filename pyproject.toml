@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "textgleaner"
-version = "0.1.0"
+version = "1.1.0"
 description = "Structured data extraction from plain-text documents using local LLM tool calls"
 authors = [{ name = "Lyutenant" }]
 license = { text = "MIT" }
