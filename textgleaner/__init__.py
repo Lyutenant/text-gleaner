@@ -47,6 +47,7 @@ class Config:
         confidence_scores: Union[bool, None] = None,
         max_chars: Union[int, None] = None,
         extraction_method: Union[str, None] = None,
+        confidence_retry: Union[bool, None] = None,
     ):
         self.base_url = base_url
         self.model = model
@@ -57,6 +58,7 @@ class Config:
         self.confidence_scores = confidence_scores
         self.max_chars = max_chars
         self.extraction_method = extraction_method
+        self.confidence_retry = confidence_retry
 
     @classmethod
     def from_yaml(cls, path: PathLike) -> "Config":
@@ -99,6 +101,7 @@ class Config:
             confidence_scores=ext.get("confidence_scores"),
             max_chars=ext.get("max_chars"),
             extraction_method=ext.get("extraction_method"),
+            confidence_retry=ext.get("confidence_retry"),
         )
 
 
@@ -139,7 +142,7 @@ def _merge_config(config: Union[Config, None], **kwargs) -> dict:
         for attr in (
             "base_url", "model", "api_key", "temperature",
             "max_tokens", "timeout", "confidence_scores", "max_chars",
-            "extraction_method",
+            "extraction_method", "confidence_retry",
         ):
             val = getattr(config, attr, None)
             if val is not None:
@@ -227,6 +230,7 @@ def extract(
     *,
     config: Union[Config, None] = None,
     extraction_method: Union[str, None] = None,
+    confidence_retry: Union[bool, None] = None,
     base_url: Union[str, None] = None,
     model: Union[str, None] = None,
     api_key: Union[str, None] = None,
@@ -288,6 +292,7 @@ def extract(
         config,
         max_chars=max_chars,
         extraction_method=extraction_method,
+        confidence_retry=confidence_retry,
         base_url=base_url,
         model=model,
         api_key=api_key,
@@ -304,6 +309,7 @@ def extract(
         single,
         max_chars=resolved.get("max_chars"),
         extraction_method=resolved.get("extraction_method"),
+        confidence_retry=resolved.get("confidence_retry"),
         base_url=resolved.get("base_url"),
         model=resolved.get("model"),
         api_key=resolved.get("api_key"),

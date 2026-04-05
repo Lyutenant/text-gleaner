@@ -17,5 +17,6 @@ class ExtractionConfig(BaseSettings):
     confidence_scores: bool = True
     max_chars: int = 200_000   # per-file limit; 0 = no limit
     extraction_method: str = "tool_call"  # tool_call | structured_output | auto
+    confidence_retry: bool = False  # retry fields with confidence ≤ 0.4
 
     model_config = SettingsConfigDict(env_prefix="TEXTGLEANER__EXTRACTION__", extra="ignore")

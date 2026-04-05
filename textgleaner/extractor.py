@@ -113,6 +113,90 @@ def _extract_one_structured(client: LLMClient, schema: dict, text: str, filename
         raise
 
 
+RETRY_CONFIDENCE_THRESHOLD = 0.4
+
+
+def _build_retry_schema(schema: dict, fields: list[str]) -> dict:
+    """Return a copy of schema containing only *fields* and their _confidence siblings."""
+    orig_props = schema["parameters"].get("properties", {})
+    props: dict = {}
+    for f in fields:
+        if f in orig_props:
+            props[f] = orig_props[f]
+        conf_key = f"{f}_confidence"
+        if conf_key in orig_props:
+            props[conf_key] = orig_props[conf_key]
+    return {
+        "name": schema["name"],
+        "description": schema.get("description", ""),
+        "parameters": {"type": "object", "properties": props},
+    }
+
+
+def _retry_low_confidence(
+    client: LLMClient,
+    schema: dict,
+    text: str,
+    filename: str,
+    result: dict,
+    method: str,
+) -> dict:
+    """Re-extract fields whose confidence score is ≤ RETRY_CONFIDENCE_THRESHOLD.
+
+    Sends a second, narrowed extraction call covering only the weak fields.
+    A field is updated in the result only when the retry returns a strictly
+    higher confidence score, so a failed retry never makes things worse.
+
+    Fields without a ``_confidence`` sibling (i.e. confidence_scores disabled)
+    are silently skipped.
+    """
+    low_conf_fields: list[str] = []
+    for key in result:
+        if key.endswith("_confidence"):
+            continue
+        conf = result.get(f"{key}_confidence")
+        if conf is not None and conf <= RETRY_CONFIDENCE_THRESHOLD:
+            low_conf_fields.append(key)
+
+    if not low_conf_fields:
+        return result
+
+    logger.info(
+        "filename=%s confidence_retry: %d field(s) at or below %.1f threshold: %s",
+        filename, len(low_conf_fields), RETRY_CONFIDENCE_THRESHOLD, ", ".join(low_conf_fields),
+    )
+
+    retry_schema = _build_retry_schema(schema, low_conf_fields)
+    try:
+        if method == "structured_output":
+            retry_result = _extract_one_structured(client, retry_schema, text, filename)
+        elif method == "auto":
+            retry_result = _extract_one_auto(client, retry_schema, text, filename)
+        else:
+            retry_result = _extract_one_tool_call(client, retry_schema, text, filename)
+    except Exception as e:
+        logger.warning(
+            "filename=%s confidence_retry failed (%s) — keeping original result", filename, e,
+        )
+        return result
+
+    updated = dict(result)
+    improved = 0
+    for field in low_conf_fields:
+        orig_conf = result.get(f"{field}_confidence") or 0.0
+        retry_conf = retry_result.get(f"{field}_confidence")
+        if retry_conf is not None and retry_conf > orig_conf:
+            updated[field] = retry_result[field]
+            updated[f"{field}_confidence"] = retry_conf
+            improved += 1
+
+    logger.info(
+        "filename=%s confidence_retry: improved %d/%d field(s)",
+        filename, improved, len(low_conf_fields),
+    )
+    return updated
+
+
 def _extract_one_auto(client: LLMClient, schema: dict, text: str, filename: str) -> dict:
     """Try tool_call first; fall back to structured_output if the model or server
     cannot handle the tool call.
@@ -152,6 +236,7 @@ def extract(
     *,
     max_chars: int | None = None,
     extraction_method: str | None = None,
+    confidence_retry: bool | None = None,
     base_url: str | None = None,
     model: str | None = None,
     api_key: str | None = None,
@@ -162,6 +247,7 @@ def extract(
     cfg = ExtractionConfig()
     effective_max = max_chars if max_chars is not None else cfg.max_chars
     effective_method = extraction_method or cfg.extraction_method
+    effective_retry = confidence_retry if confidence_retry is not None else cfg.confidence_retry
 
     client = LLMClient(
         base_url=base_url,
@@ -183,6 +269,8 @@ def extract(
             data = _extract_one_auto(client, schema, text, name)
         else:  # tool_call
             data = _extract_one_tool_call(client, schema, text, name)
+        if effective_retry:
+            data = _retry_low_confidence(client, schema, text, name, data, effective_method)
         results[name] = data
 
     if output_path is not None:

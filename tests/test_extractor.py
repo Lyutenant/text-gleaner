@@ -6,7 +6,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import httpx
-from textgleaner.extractor import extract, _check_size, _extract_one_tool_call, _extract_one_structured
+from textgleaner.extractor import (
+    extract, _check_size, _extract_one_tool_call, _extract_one_structured,
+    _build_retry_schema, _retry_low_confidence, RETRY_CONFIDENCE_THRESHOLD,
+)
 
 
 class TestCheckSize:
@@ -210,6 +213,175 @@ class TestExtractionMethods:
                         extraction_method="auto")
 
         mock_client.get_content.assert_not_called()  # no fallback attempted
+
+
+class TestRetryLowConfidence:
+    def _schema(self):
+        return {
+            "name": "extract_data",
+            "description": "Test",
+            "parameters": {"type": "object", "properties": {
+                "account": {"type": ["string", "null"], "description": "Account"},
+                "account_confidence": {"type": "number"},
+                "amount": {"type": ["string", "null"], "description": "Amount"},
+                "amount_confidence": {"type": "number"},
+            }},
+        }
+
+    # --- _build_retry_schema ---
+
+    def test_build_retry_schema_keeps_requested_fields(self):
+        schema = self._schema()
+        retry = _build_retry_schema(schema, ["amount"])
+        props = retry["parameters"]["properties"]
+        assert "amount" in props
+        assert "amount_confidence" in props
+
+    def test_build_retry_schema_excludes_other_fields(self):
+        schema = self._schema()
+        retry = _build_retry_schema(schema, ["amount"])
+        props = retry["parameters"]["properties"]
+        assert "account" not in props
+        assert "account_confidence" not in props
+
+    def test_build_retry_schema_preserves_name(self):
+        schema = self._schema()
+        retry = _build_retry_schema(schema, ["amount"])
+        assert retry["name"] == schema["name"]
+
+    def test_build_retry_schema_no_confidence_sibling(self):
+        schema = {
+            "name": "x",
+            "description": "",
+            "parameters": {"type": "object", "properties": {
+                "val": {"type": ["string", "null"]},
+            }},
+        }
+        retry = _build_retry_schema(schema, ["val"])
+        assert "val" in retry["parameters"]["properties"]
+        assert "val_confidence" not in retry["parameters"]["properties"]
+
+    # --- _retry_low_confidence ---
+
+    def test_no_retry_when_all_confident(self):
+        """No LLM call when every field is above the threshold."""
+        mock_client = MagicMock()
+        result = {"account": "123", "account_confidence": 1.0,
+                  "amount": "50", "amount_confidence": 0.9}
+        updated = _retry_low_confidence(mock_client, self._schema(), "text", "doc.txt", result, "tool_call")
+        mock_client.chat.assert_not_called()
+        assert updated == result
+
+    def test_no_retry_when_no_confidence_fields(self):
+        """Fields without _confidence siblings are skipped (confidence_scores disabled)."""
+        mock_client = MagicMock()
+        result = {"account": None, "amount": None}
+        updated = _retry_low_confidence(mock_client, self._schema(), "text", "doc.txt", result, "tool_call")
+        mock_client.chat.assert_not_called()
+        assert updated == result
+
+    def test_retry_called_for_low_confidence_field(self):
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        mock_client.get_tool_arguments.return_value = {
+            "amount": "99.00", "amount_confidence": 0.9,
+        }
+        result = {"account": "123", "account_confidence": 1.0,
+                  "amount": None, "amount_confidence": 0.0}
+        updated = _retry_low_confidence(mock_client, self._schema(), "text", "doc.txt", result, "tool_call")
+        mock_client.chat.assert_called_once()
+        assert updated["amount"] == "99.00"
+        assert updated["amount_confidence"] == 0.9
+
+    def test_retry_at_threshold_boundary(self):
+        """A field exactly at the threshold (0.4) is retried."""
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        mock_client.get_tool_arguments.return_value = {
+            "amount": "50.00", "amount_confidence": 0.7,
+        }
+        result = {"amount": "~50", "amount_confidence": RETRY_CONFIDENCE_THRESHOLD,
+                  "amount_confidence": 0.4}
+        updated = _retry_low_confidence(mock_client, self._schema(), "text", "doc.txt", result, "tool_call")
+        mock_client.chat.assert_called_once()
+
+    def test_retry_does_not_downgrade(self):
+        """If the retry returns equal or lower confidence, the original value is kept."""
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        mock_client.get_tool_arguments.return_value = {
+            "amount": "wrong", "amount_confidence": 0.0,
+        }
+        result = {"account": "123", "account_confidence": 1.0,
+                  "amount": "50", "amount_confidence": 0.4}
+        updated = _retry_low_confidence(mock_client, self._schema(), "text", "doc.txt", result, "tool_call")
+        # retry confidence (0.0) ≤ original (0.4) → keep original
+        assert updated["amount"] == "50"
+        assert updated["amount_confidence"] == 0.4
+
+    def test_retry_failure_keeps_original(self):
+        """If the retry call raises, the original result is returned unchanged."""
+        mock_client = MagicMock()
+        mock_client.chat.side_effect = ValueError("LLM error")
+        result = {"amount": None, "amount_confidence": 0.0}
+        updated = _retry_low_confidence(mock_client, self._schema(), "text", "doc.txt", result, "tool_call")
+        assert updated == result
+
+    def test_retry_only_sends_narrowed_schema(self):
+        """The retry call must only include the low-confidence field, not the full schema."""
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        mock_client.get_tool_arguments.return_value = {"amount": "99", "amount_confidence": 0.8}
+        result = {"account": "123", "account_confidence": 1.0,
+                  "amount": None, "amount_confidence": 0.0}
+        _retry_low_confidence(mock_client, self._schema(), "text", "doc.txt", result, "tool_call")
+        # Inspect the tools payload sent to chat
+        call_kwargs = mock_client.chat.call_args
+        tools_sent = call_kwargs[1].get("tools") or call_kwargs[0][1]
+        # The tool should only contain amount and amount_confidence properties
+        props = tools_sent[0]["function"]["parameters"]["properties"]
+        assert "amount" in props
+        assert "account" not in props
+
+    # --- extract() integration ---
+
+    def test_extract_calls_retry_when_enabled(self):
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        # First call: initial extraction returns low-confidence amount
+        # Second call (retry): returns improved amount
+        mock_client.get_tool_arguments.side_effect = [
+            {"amount": None, "amount_confidence": 0.0},          # initial
+            {"amount": "42.00", "amount_confidence": 0.9},       # retry
+        ]
+        schema = {
+            "name": "extract_data", "description": "",
+            "parameters": {"type": "object", "properties": {
+                "amount": {"type": ["string", "null"]},
+                "amount_confidence": {"type": "number"},
+            }},
+        }
+        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+            result = extract([("text", "doc.txt")], schema, None, single=True,
+                             confidence_retry=True)
+        assert result["amount"] == "42.00"
+        assert mock_client.chat.call_count == 2
+
+    def test_extract_no_retry_by_default(self):
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        mock_client.get_tool_arguments.return_value = {"amount": None, "amount_confidence": 0.0}
+        schema = {
+            "name": "extract_data", "description": "",
+            "parameters": {"type": "object", "properties": {
+                "amount": {"type": ["string", "null"]},
+                "amount_confidence": {"type": "number"},
+            }},
+        }
+        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+            extract([("text", "doc.txt")], schema, None, single=True)
+        # Only one chat call — no retry
+        assert mock_client.chat.call_count == 1
 
 
 class TestPublicAPI:

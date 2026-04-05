@@ -30,6 +30,7 @@ extraction:
   confidence_scores: true
   max_chars: 200000
   extraction_method: tool_call  # tool_call | structured_output | auto
+  confidence_retry: false       # retry fields with confidence ≤ 0.4
 ```
 
 The Python API supports three configuration methods, in priority order (highest first):
@@ -184,6 +185,16 @@ Every data field has a sibling `<field>_confidence` field (0–1 float) when `ex
 - `0.4` = inferred / uncertain
 - `0.0` = not found (field will be `null`)
 
+### Confidence retry (Phase 2)
+
+When `extraction.confidence_retry: true`, a second targeted LLM call is made after the initial extraction for any field whose `_confidence` score is ≤ 0.4 ("inferred / uncertain" or "not found"). The retry uses a narrowed schema containing only those fields, so the model focuses entirely on finding them.
+
+Merge rule: a field is updated from the retry only if the retry returns a **strictly higher** confidence score. This guarantees the retry can never make results worse — a failed or equally uncertain retry is silently discarded.
+
+If the retry call itself raises an exception (network error, parse error), the original result is returned unchanged and a warning is logged.
+
+`confidence_retry` is off by default (it adds one LLM call per document). Enable it in config or via `confidence_retry=True` in the Python API or `TEXTGLEANER__EXTRACTION__CONFIDENCE_RETRY=true` env var.
+
 ### Two-pass schema generation (Phase 1)
 
 Schema generation uses two LLM calls:
@@ -287,7 +298,7 @@ Items suggested but not yet implemented, roughly in priority order:
 - [ ] **Examples gallery** — `examples/` directory with 2–3 real-world use cases (invoice, contract, brokerage statement) including sample description files, schemas, and a walkthrough README
 
 ### Medium-term
-- [ ] **Retry on low-confidence fields** — after extraction, detect fields with confidence ≤ 0.4 and re-prompt with only those fields; one targeted follow-up call often recovers missed values
+- [x] **Retry on low-confidence fields** — after extraction, detect fields with confidence ≤ 0.4 and re-prompt with only those fields; one targeted follow-up call often recovers missed values
 - [x] **Schema validation / dry-run** — `validate` CLI command and `validate()` Python API; runs extraction on samples and prints a per-field table flagging `always_null`, `high_null`, and `low_confidence` fields; configurable thresholds; optional JSON report output
 - [x] **Batch extraction with summary report** — `--inputs-dir` in CLI; output format inferred from extension (`.json`/`.csv`/`.xlsx`); `summarize()` computes per-field null-rate and avg confidence; `--report` writes summary CSV
 - [x] **Make `auto` mode smarter** — tries `tool_call` first; falls back to `structured_output` on `ValueError`, `JSONDecodeError`, or `HTTP 400/422`; re-raises timeouts and `HTTP 5xx`
