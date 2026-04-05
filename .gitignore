@@ -1,4 +1,5 @@
 config.yaml
+CLAUDE.md
 __pycache__/
 *.pyc
 *.egg-info/
