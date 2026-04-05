@@ -5,9 +5,7 @@
 A two-phase CLI tool and Python library for structured data extraction from plain-text documents using LLM tool calls.
 
 - **Phase 1 (`generate-schema`)**: LLM analyzes sample text files + a user description to generate a JSON tool-call schema
-- **Phase 2 (`extract`)**: LLM extracts structured data from text files by being forced to call the tool defined in the schema
-
-The "forced tool call" trick: when `tool_choice` is set to require a specific tool, the LLM must populate that tool's arguments — giving deterministic, schema-validated JSON output.
+- **Phase 2 (`extract`)**: LLM extracts structured data from text files using the schema, via forced tool call or grammar-constrained structured output
 
 **Input is always plain text.** PDF-to-text conversion, chunking, and any other pre-processing is the user's responsibility.
 
@@ -15,14 +13,14 @@ The "forced tool call" trick: when `tool_choice` is set to require a specific to
 
 ## LLM Configuration
 
-The LLM is a **local Qwen model** served via Ollama. All calls go through Ollama's OpenAI-compatible HTTP API at `/v1/chat/completions`.
+The LLM is a **local model** served via Ollama. All calls go through Ollama's OpenAI-compatible HTTP API at `/v1/chat/completions`.
 
 Config lives in `config.yaml` (gitignored; copy from `config.example.yaml`):
 
 ```yaml
 llm:
-  base_url: "http://<host>:<port>"
-  model: "qwen3.5:35b-a3b-q4_K_M"
+  base_url: "http://localhost:11434"
+  model: "qwen3:30b"
   api_key: "local"
   temperature: 0.2
   max_tokens: 32768
@@ -31,6 +29,7 @@ llm:
 extraction:
   confidence_scores: true
   max_chars: 200000
+  extraction_method: tool_call  # tool_call | structured_output | auto
 ```
 
 The Python API supports three configuration methods, in priority order (highest first):
@@ -65,7 +64,7 @@ textgleaner/
 ├── config.py           # pydantic-settings model; env var overrides only (no YAML)
 ├── llm_client.py       # thin httpx wrapper; OpenAI-compatible /v1/chat/completions
 ├── schema_generator.py # Phase 1 logic
-├── extractor.py        # Phase 2 logic
+├── extractor.py        # Phase 2 logic: _extract_one_tool_call, _extract_one_structured
 └── __init__.py         # public Python API: Config, generate_schema(), extract(), Text
 ```
 
@@ -105,6 +104,9 @@ results = extract(["jan.txt", "feb.txt"], schema=schema, output="results.json", 
 
 # Override a specific value (explicit kwargs take priority over config)
 result = extract("big.txt", schema=schema, config=cfg, max_chars=500_000)
+
+# Use structured output (grammar-constrained) instead of tool call
+result = extract("doc.txt", schema=schema, config=cfg, extraction_method="structured_output")
 
 # Sectionized extraction with Text — pass raw text slices directly
 pages = open("statement.txt").read().split("\f")   # split on form-feed
@@ -159,14 +161,17 @@ textgleaner --config /path/to/myconfig.yaml extract \
 
 ## Key Design Decisions
 
-### Forced tool call for JSON extraction
-In Phase 2, the schema is passed as a tool definition with:
-```python
-"tool_choice": {"type": "function", "function": {"name": schema["name"]}}
-```
-The LLM is asked to call this tool, and extracted data is parsed from `tool_calls[0]["function"]["arguments"]`.
+### Extraction methods (Phase 2)
 
-**Fallback:** Qwen3 via Ollama sometimes ignores `tool_choice` and returns the JSON in the message `content` field instead. `get_tool_arguments()` detects this and parses the content as JSON (stripping markdown code fences if present) before raising an error. The structured data is identical either way.
+Two methods are available via `extraction_method` config / kwarg:
+
+**`tool_call`** (default): The schema is passed as a tool definition with forced `tool_choice`. The LLM is instructed to call the tool, and extracted data is parsed from `tool_calls[0]["function"]["arguments"]`. Enforcement is by instruction-following — the model reads "you must call this tool" and complies. Works well with large, capable models (Qwen3, GPT-4o, etc.).
+
+**Fallback within tool_call:** Qwen3 via Ollama sometimes ignores `tool_choice` and returns the JSON in the message `content` field instead. `get_tool_arguments()` detects this and parses the content as JSON (stripping markdown code fences if present).
+
+**`structured_output`**: The schema is passed as `response_format: {type: json_schema, json_schema: {...}}`. Ollama hands this to llama.cpp, which converts the schema into a grammar and applies it during token sampling — the model physically cannot produce output that doesn't match the schema. More reliable on smaller or weaker models that may ignore `tool_choice`. If the model returns empty content (observed occasionally with Qwen3 + `think: false`), the call is retried once automatically.
+
+**`auto`**: Same as `tool_call` for now; intended to become smarter in a future version.
 
 ### Input size limit
 If an input file exceeds `extraction.max_chars` (default 200,000), a `ValueError` is raised before the LLM call. Set to 0 to disable. Users are expected to split large files themselves.
@@ -199,6 +204,7 @@ If Pass 2 returns malformed JSON, the conversation is extended with an error-cor
 - **Input exceeds max_chars**: raise `ValueError` with clear message before LLM call
 - **Malformed tool call response**: log filename + error, re-raise
 - **Invalid JSON from Phase 1**: retry once with correction prompt, then raise
+- **Empty content in structured_output**: retry once automatically, then raise
 - Logging uses stdlib `logging` with structured fields: `filename`, `error`
 
 ---
@@ -264,4 +270,27 @@ Tests mock all LLM calls. Cover:
 - `LLMClient` kwarg precedence over env vars
 - `Config` class: direct kwargs, `from_yaml()`, missing file, partial YAML
 - `config=` kwarg on public API: values passed through to `LLMClient`, explicit kwarg overrides config
+- `extraction_method`: tool_call path, structured_output path, response_format payload shape, auto routing, markdown fence stripping
 - Python public API: single vs multiple inputs, `Text` instances, `base_url` kwarg passthrough
+
+---
+
+## To-Do / Roadmap
+
+Items suggested but not yet implemented, roughly in priority order:
+
+### Near-term
+- [ ] **GitHub Actions CI** — run `pytest` on every push; makes the repo look maintained and catches regressions
+- [ ] **PyPI publishing** — `pip install textgleaner` from PyPI; `pyproject.toml` is already set up, just needs a publish workflow
+- [ ] **Examples gallery** — `examples/` directory with 2–3 real-world use cases (invoice, contract, brokerage statement) including sample description files, schemas, and a walkthrough README
+
+### Medium-term
+- [ ] **Retry on low-confidence fields** — after extraction, detect fields with confidence ≤ 0.4 and re-prompt with only those fields; one targeted follow-up call often recovers missed values
+- [ ] **Schema validation / dry-run** — a `validate` command that runs extraction and reports which fields came back null or low-confidence; helps users iterate on their schema before a full batch run
+- [ ] **Batch extraction with summary report** — `extract` over a directory of files with CSV/Excel output option and a per-field null-rate summary
+- [ ] **Make `auto` mode smarter** — currently `auto` == `tool_call`; should try `tool_call` and automatically fall back to `structured_output` if the server returns an error or if the response contains no tool calls and no parseable content
+
+### Longer-term
+- [ ] **Schema versioning / refinement** — a `refine-schema` command that takes an existing schema + new samples and patches it, without re-running Phase 1 from scratch
+- [ ] **Model profiles** — abstract Qwen3-specific workarounds (`extra_body: {think: false}`) into named model profiles so other models (Llama, Mistral, etc.) work better out of the box
+- [ ] **Streaming extraction output** — progress callback / hook so callers can process partial results as each input completes, rather than waiting for the full batch
