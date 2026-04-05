@@ -305,9 +305,9 @@ Tests mock all LLM calls. Cover:
 Items suggested but not yet implemented, roughly in priority order:
 
 ### Near-term
-- [ ] **GitHub Actions CI** — run `pytest` on every push; makes the repo look maintained and catches regressions
-- [ ] **PyPI publishing** — `pip install textgleaner` from PyPI; `pyproject.toml` is already set up, just needs a publish workflow
-- [ ] **Examples gallery** — `examples/` directory with 2–3 real-world use cases (invoice, contract, brokerage statement) including sample description files, schemas, and a walkthrough README
+- [x] **GitHub Actions CI** — run `pytest` on every push; makes the repo look maintained and catches regressions
+- [x] **PyPI publishing** — `pip install textgleaner` from PyPI; `pyproject.toml` is already set up, just needs a publish workflow
+- [x] **Examples gallery** — `examples/` directory with 2–3 real-world use cases (invoice, contract, brokerage statement) including sample description files, schemas, and a walkthrough README
 
 ### Medium-term
 - [x] **Retry on low-confidence fields** — after extraction, detect fields with confidence ≤ 0.4 and re-prompt with only those fields; one targeted follow-up call often recovers missed values
