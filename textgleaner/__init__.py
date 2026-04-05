@@ -249,7 +249,9 @@ def extract(
                            ``structured_output`` — uses ``response_format`` with
                            ``json_schema`` (grammar-constrained decoding); works with
                            models that handle tool_choice poorly.
-                           ``auto`` — same as ``tool_call`` for now.
+                           ``auto`` — tries ``tool_call`` first; falls back to
+                           ``structured_output`` if the model returns unparseable
+                           output or the server returns HTTP 400/422.
         base_url: LLM server base URL. Overrides config. Defaults to TEXTGLEANER__LLM__BASE_URL.
         model: Model name. Overrides config. Defaults to TEXTGLEANER__LLM__MODEL.
         api_key: API key. Overrides config. Defaults to TEXTGLEANER__LLM__API_KEY.

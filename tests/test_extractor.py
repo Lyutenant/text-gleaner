@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import httpx
 from textgleaner.extractor import extract, _check_size, _extract_one_tool_call, _extract_one_structured
 
 
@@ -162,6 +163,53 @@ class TestExtractionMethods:
 
         assert result == {"value": "auto"}
         mock_client.get_tool_arguments.assert_called_once()
+
+    def test_auto_falls_back_on_value_error(self):
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        mock_client.get_tool_arguments.side_effect = ValueError("No tool_calls and no content")
+        mock_client.get_content.return_value = '{"value": "fallback"}'
+
+        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+            result = extract([("text", "doc.txt")], self._schema(), None, single=True,
+                             extraction_method="auto")
+
+        assert result == {"value": "fallback"}
+        mock_client.get_tool_arguments.assert_called_once()  # tried tool_call
+        mock_client.get_content.assert_called_once()         # fell back to structured_output
+
+    def test_auto_falls_back_on_http_400(self):
+        mock_response = MagicMock()
+        mock_response.status_code = 400
+        http_error = httpx.HTTPStatusError("Bad Request", request=MagicMock(), response=mock_response)
+
+        mock_client = MagicMock()
+        # First chat call (tool_call) raises 400; second (structured_output) succeeds
+        mock_client.chat.side_effect = [http_error, {}]
+        mock_client.get_content.return_value = '{"value": "fallback"}'
+
+        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+            result = extract([("text", "doc.txt")], self._schema(), None, single=True,
+                             extraction_method="auto")
+
+        assert result == {"value": "fallback"}
+        assert mock_client.chat.call_count == 2
+        mock_client.get_content.assert_called_once()
+
+    def test_auto_reraises_non_4xx_http_errors(self):
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        http_error = httpx.HTTPStatusError("Server Error", request=MagicMock(), response=mock_response)
+
+        mock_client = MagicMock()
+        mock_client.chat.side_effect = http_error
+
+        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+            with pytest.raises(httpx.HTTPStatusError):
+                extract([("text", "doc.txt")], self._schema(), None, single=True,
+                        extraction_method="auto")
+
+        mock_client.get_content.assert_not_called()  # no fallback attempted
 
 
 class TestPublicAPI:

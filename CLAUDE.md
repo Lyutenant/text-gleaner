@@ -171,7 +171,7 @@ Two methods are available via `extraction_method` config / kwarg:
 
 **`structured_output`**: The schema is passed as `response_format: {type: json_schema, json_schema: {...}}`. Ollama hands this to llama.cpp, which converts the schema into a grammar and applies it during token sampling — the model physically cannot produce output that doesn't match the schema. More reliable on smaller or weaker models that may ignore `tool_choice`. If the model returns empty content (observed occasionally with Qwen3 + `think: false`), the call is retried once automatically.
 
-**`auto`**: Same as `tool_call` for now; intended to become smarter in a future version.
+**`auto`**: Tries `tool_call` first. Falls back to `structured_output` if the model returns unparseable output (`ValueError`, `JSONDecodeError`) or the server rejects the tools payload (`HTTP 400/422`). All other failures (timeouts, `HTTP 5xx`) are re-raised immediately since they would fail the same way on either path.
 
 ### Input size limit
 If an input file exceeds `extraction.max_chars` (default 200,000), a `ValueError` is raised before the LLM call. Set to 0 to disable. Users are expected to split large files themselves.
@@ -270,7 +270,7 @@ Tests mock all LLM calls. Cover:
 - `LLMClient` kwarg precedence over env vars
 - `Config` class: direct kwargs, `from_yaml()`, missing file, partial YAML
 - `config=` kwarg on public API: values passed through to `LLMClient`, explicit kwarg overrides config
-- `extraction_method`: tool_call path, structured_output path, response_format payload shape, auto routing, markdown fence stripping
+- `extraction_method`: tool_call path, structured_output path, response_format payload shape, markdown fence stripping, auto routing (success, ValueError fallback, HTTP 400 fallback, HTTP 500 re-raise)
 - Python public API: single vs multiple inputs, `Text` instances, `base_url` kwarg passthrough
 
 ---
@@ -288,7 +288,7 @@ Items suggested but not yet implemented, roughly in priority order:
 - [ ] **Retry on low-confidence fields** — after extraction, detect fields with confidence ≤ 0.4 and re-prompt with only those fields; one targeted follow-up call often recovers missed values
 - [ ] **Schema validation / dry-run** — a `validate` command that runs extraction and reports which fields came back null or low-confidence; helps users iterate on their schema before a full batch run
 - [ ] **Batch extraction with summary report** — `extract` over a directory of files with CSV/Excel output option and a per-field null-rate summary
-- [ ] **Make `auto` mode smarter** — currently `auto` == `tool_call`; should try `tool_call` and automatically fall back to `structured_output` if the server returns an error or if the response contains no tool calls and no parseable content
+- [x] **Make `auto` mode smarter** — tries `tool_call` first; falls back to `structured_output` on `ValueError`, `JSONDecodeError`, or `HTTP 400/422`; re-raises timeouts and `HTTP 5xx`
 
 ### Longer-term
 - [ ] **Schema versioning / refinement** — a `refine-schema` command that takes an existing schema + new samples and patches it, without re-running Phase 1 from scratch

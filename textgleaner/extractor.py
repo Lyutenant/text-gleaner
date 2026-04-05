@@ -5,6 +5,8 @@ import re
 from pathlib import Path  # used only for output_path
 from typing import Any
 
+import httpx
+
 from .config import ExtractionConfig
 from .llm_client import LLMClient
 
@@ -111,6 +113,37 @@ def _extract_one_structured(client: LLMClient, schema: dict, text: str, filename
         raise
 
 
+def _extract_one_auto(client: LLMClient, schema: dict, text: str, filename: str) -> dict:
+    """Try tool_call first; fall back to structured_output if the model or server
+    cannot handle the tool call.
+
+    Fallback is triggered by:
+    - ValueError / JSONDecodeError — model ignored tool_choice and returned
+      unparseable output
+    - HTTP 400 / 422 — server rejected the tools payload (model doesn't support
+      tool calls)
+
+    All other exceptions (timeouts, HTTP 5xx, etc.) are re-raised immediately
+    since they would fail the same way on the structured_output path.
+    """
+    try:
+        return _extract_one_tool_call(client, schema, text, filename)
+    except (ValueError, json.JSONDecodeError) as e:
+        logger.warning(
+            "filename=%s tool_call produced no usable output (%s) — retrying with structured_output",
+            filename, type(e).__name__,
+        )
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code in (400, 422):
+            logger.warning(
+                "filename=%s HTTP %d on tool_call request — retrying with structured_output",
+                filename, e.response.status_code,
+            )
+        else:
+            raise
+    return _extract_one_structured(client, schema, text, filename)
+
+
 def extract(
     inputs: list[tuple[str, str]],
     schema: dict,
@@ -146,7 +179,9 @@ def extract(
         logger.info("Extracting from %s (%d chars) method=%s", name, len(text), effective_method)
         if effective_method == "structured_output":
             data = _extract_one_structured(client, schema, text, name)
-        else:  # tool_call or auto (auto uses tool_call with content fallback)
+        elif effective_method == "auto":
+            data = _extract_one_auto(client, schema, text, name)
+        else:  # tool_call
             data = _extract_one_tool_call(client, schema, text, name)
         results[name] = data
 
