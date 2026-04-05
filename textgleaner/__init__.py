@@ -5,7 +5,11 @@ from typing import Union
 
 from .schema_generator import generate_schema as _generate_schema
 from .extractor import extract as _extract
-from .reporter import summarize as _summarize, write_csv, write_excel, write_summary_csv
+from .reporter import (
+    summarize as _summarize,
+    write_csv, write_excel, write_summary_csv,
+    build_validation_report, format_validation_report,
+)
 
 PathLike = Union[str, Path]
 
@@ -341,6 +345,82 @@ def summarize(
         p.parent.mkdir(parents=True, exist_ok=True)
         write_summary_csv(summary, p)
     return summary
+
+
+def validate(
+    inputs: Union[PathLike, Text, list[Union[PathLike, Text]]],
+    schema: Union[dict, PathLike],
+    *,
+    config: Union[Config, None] = None,
+    null_threshold: float = 0.5,
+    confidence_threshold: float = 0.5,
+    output: Union[PathLike, None] = None,
+    base_url: Union[str, None] = None,
+    model: Union[str, None] = None,
+    api_key: Union[str, None] = None,
+    temperature: Union[float, None] = None,
+    max_tokens: Union[int, None] = None,
+    timeout: Union[int, None] = None,
+) -> dict:
+    """Dry-run extraction on sample documents and report per-field quality.
+
+    Runs :func:`extract` on the provided samples, then classifies each schema
+    field as OK, high-null, always-null, or low-confidence. Prints a formatted
+    table to stdout and returns the full report dict.
+
+    Use this to iterate on your schema before running a full batch extraction.
+
+    Args:
+        inputs: One or more sample documents (file paths or :class:`Text` instances).
+        schema: Schema dict or path to a schema JSON file.
+        config: :class:`Config` instance.
+        null_threshold: null_rate above which a field is flagged ``high_null``
+                        (default 0.5).
+        confidence_threshold: avg_confidence below which a field is flagged
+                              ``low_confidence`` (default 0.5).
+        output: Optional path to save the report as JSON.
+        base_url, model, api_key, temperature, max_tokens, timeout:
+            LLM overrides (same as :func:`extract`).
+
+    Returns:
+        Report dict with ``"fields"``, ``"counts"``, and threshold values.
+    """
+    # Normalise to a list so extract() always returns {name: dict}
+    if isinstance(inputs, (str, Path, Text)):
+        inputs = [inputs]
+
+    results = extract(
+        inputs,
+        schema,
+        config=config,
+        base_url=base_url,
+        model=model,
+        api_key=api_key,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        timeout=timeout,
+    )
+
+    summary = _summarize(results)
+    report = build_validation_report(summary, null_threshold, confidence_threshold)
+
+    n = len(results)
+    names = list(results.keys())
+    sample_label = ", ".join(names[:3]) + (" …" if n > 3 else "")
+    print(f"Samples ({n}): {sample_label}")
+    print(f"Thresholds: null > {null_threshold:.0%}  confidence < {confidence_threshold:.0%}\n")
+    print(format_validation_report(report))
+
+    if output is not None:
+        import json as _json_mod
+        p = Path(output)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with p.open("w") as f:
+            _json_mod.dump(report, f, indent=2)
+            f.write("\n")
+        print(f"\nReport saved to {output}")
+
+    return report
 
 
 def _resolve_input(item: Union[PathLike, Text]) -> _TextPair:

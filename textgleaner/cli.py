@@ -110,5 +110,42 @@ def _is_flat(d: dict) -> bool:
     return bool(d) and not all(isinstance(v, dict) for v in d.values())
 
 
+@app.command("validate")
+def validate(
+    inputs: List[Path] = typer.Option(..., help="Sample text files to extract from"),
+    schema: Path = typer.Option(Path("schema.json"), help="Path to schema JSON"),
+    null_threshold: float = typer.Option(0.5, help="Null-rate above which a field is flagged"),
+    confidence_threshold: float = typer.Option(0.5, help="Confidence below which a field is flagged"),
+    output: Optional[Path] = typer.Option(None, help="Save report as JSON to this path"),
+    config: Path = typer.Option(Path("config.yaml"), help="Config YAML file", show_default=True),
+) -> None:
+    """Dry-run extraction on sample files and report per-field quality.
+
+    Runs extraction on the provided samples and prints a table showing which
+    fields are well-populated, high-null, or low-confidence. Use this to iterate
+    on your schema before running a full batch extraction.
+    """
+    from textgleaner import Config, validate as _validate
+
+    for p in inputs:
+        if not p.exists():
+            typer.echo(f"Error: input file does not exist: {p}", err=True)
+            raise typer.Exit(1)
+    if not schema.exists():
+        typer.echo(f"Error: schema file does not exist: {schema}", err=True)
+        raise typer.Exit(1)
+
+    cfg = Config.from_yaml(config) if config.exists() else Config()
+
+    _validate(
+        inputs=inputs,
+        schema=schema,
+        config=cfg,
+        null_threshold=null_threshold,
+        confidence_threshold=confidence_threshold,
+        output=output,
+    )
+
+
 if __name__ == "__main__":
     app()

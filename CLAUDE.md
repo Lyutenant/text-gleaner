@@ -288,7 +288,7 @@ Items suggested but not yet implemented, roughly in priority order:
 
 ### Medium-term
 - [ ] **Retry on low-confidence fields** — after extraction, detect fields with confidence ≤ 0.4 and re-prompt with only those fields; one targeted follow-up call often recovers missed values
-- [ ] **Schema validation / dry-run** — a `validate` command that runs extraction and reports which fields came back null or low-confidence; helps users iterate on their schema before a full batch run
+- [x] **Schema validation / dry-run** — `validate` CLI command and `validate()` Python API; runs extraction on samples and prints a per-field table flagging `always_null`, `high_null`, and `low_confidence` fields; configurable thresholds; optional JSON report output
 - [x] **Batch extraction with summary report** — `--inputs-dir` in CLI; output format inferred from extension (`.json`/`.csv`/`.xlsx`); `summarize()` computes per-field null-rate and avg confidence; `--report` writes summary CSV
 - [x] **Make `auto` mode smarter** — tries `tool_call` first; falls back to `structured_output` on `ValueError`, `JSONDecodeError`, or `HTTP 400/422`; re-raises timeouts and `HTTP 5xx`
 

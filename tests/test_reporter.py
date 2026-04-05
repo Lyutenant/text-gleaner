@@ -6,7 +6,10 @@ from unittest.mock import patch
 
 import pytest
 
-from textgleaner.reporter import summarize, write_csv, write_summary_csv
+from textgleaner.reporter import (
+    summarize, write_csv, write_summary_csv,
+    build_validation_report, format_validation_report,
+)
 
 
 class TestSummarize:
@@ -108,6 +111,145 @@ class TestWriteSummaryCsv:
         assert len(rows) == 2
         fields = {r["field"] for r in rows}
         assert fields == {"amount", "account"}
+
+
+class TestBuildValidationReport:
+    def _summary(self):
+        return {
+            "account": {"null_rate": 0.0, "avg_confidence": 0.95},
+            "amount":  {"null_rate": 0.6, "avg_confidence": 0.80},
+            "notes":   {"null_rate": 1.0, "avg_confidence": None},
+            "items":   {"null_rate": 0.2, "avg_confidence": 0.30},
+        }
+
+    def test_ok_field(self):
+        report = build_validation_report(self._summary())
+        assert report["fields"]["account"]["issues"] == []
+
+    def test_always_null(self):
+        report = build_validation_report(self._summary())
+        assert "always_null" in report["fields"]["notes"]["issues"]
+        assert "high_null" not in report["fields"]["notes"]["issues"]
+
+    def test_high_null(self):
+        report = build_validation_report(self._summary(), null_threshold=0.5)
+        assert "high_null" in report["fields"]["amount"]["issues"]
+
+    def test_low_confidence(self):
+        report = build_validation_report(self._summary(), confidence_threshold=0.5)
+        assert "low_confidence" in report["fields"]["items"]["issues"]
+
+    def test_multiple_issues(self):
+        summary = {"f": {"null_rate": 0.8, "avg_confidence": 0.2}}
+        report = build_validation_report(summary, null_threshold=0.5, confidence_threshold=0.5)
+        assert set(report["fields"]["f"]["issues"]) == {"high_null", "low_confidence"}
+
+    def test_counts(self):
+        report = build_validation_report(self._summary(), null_threshold=0.5, confidence_threshold=0.5)
+        # account: ok; amount: high_null; notes: always_null; items: low_confidence
+        assert report["counts"]["ok"] == 1
+        assert report["counts"]["always_null"] == 1
+        assert report["counts"]["high_null"] == 1
+        assert report["counts"]["low_confidence"] == 1
+
+    def test_no_confidence_field_not_flagged(self):
+        summary = {"f": {"null_rate": 0.0, "avg_confidence": None}}
+        report = build_validation_report(summary, confidence_threshold=0.9)
+        # No confidence data → should not be flagged as low_confidence
+        assert "low_confidence" not in report["fields"]["f"]["issues"]
+
+
+class TestFormatValidationReport:
+    def test_contains_field_names(self):
+        summary = {
+            "account": {"null_rate": 0.0, "avg_confidence": 0.9},
+            "notes":   {"null_rate": 1.0, "avg_confidence": None},
+        }
+        report = build_validation_report(summary)
+        text = format_validation_report(report)
+        assert "account" in text
+        assert "notes" in text
+
+    def test_ok_label_present(self):
+        summary = {"field": {"null_rate": 0.0, "avg_confidence": 0.9}}
+        report = build_validation_report(summary)
+        text = format_validation_report(report)
+        assert "OK" in text
+
+    def test_always_null_label_present(self):
+        summary = {"field": {"null_rate": 1.0, "avg_confidence": None}}
+        report = build_validation_report(summary)
+        text = format_validation_report(report)
+        assert "ALWAYS NULL" in text
+
+    def test_summary_line_present(self):
+        summary = {"a": {"null_rate": 0.0, "avg_confidence": 0.9}}
+        report = build_validation_report(summary)
+        text = format_validation_report(report)
+        assert "fields total" in text
+
+
+class TestPublicValidate:
+    def _schema(self):
+        return {
+            "name": "extract_data",
+            "description": "Test",
+            "parameters": {"type": "object", "properties": {
+                "value": {"type": ["string", "null"], "description": "Value"},
+                "value_confidence": {"type": "number", "description": "Confidence"},
+            }},
+        }
+
+    def test_returns_report_dict(self, tmp_path):
+        from unittest.mock import MagicMock, patch
+        from textgleaner import validate, Text
+
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        mock_client.get_tool_arguments.side_effect = [
+            {"value": "x", "value_confidence": 0.9},
+            {"value": None, "value_confidence": 0.0},
+        ]
+
+        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+            report = validate(
+                [Text("doc a", name="a"), Text("doc b", name="b")],
+                schema=self._schema(),
+            )
+
+        assert "fields" in report
+        assert "value" in report["fields"]
+        assert report["fields"]["value"]["null_rate"] == 0.5
+
+    def test_single_input_normalised_to_list(self):
+        from unittest.mock import MagicMock, patch
+        from textgleaner import validate, Text
+
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        mock_client.get_tool_arguments.return_value = {"value": "x", "value_confidence": 1.0}
+
+        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+            report = validate(Text("doc", name="a"), schema=self._schema())
+
+        assert "fields" in report
+
+    def test_saves_json_when_output_given(self, tmp_path):
+        from unittest.mock import MagicMock, patch
+        from textgleaner import validate, Text
+        import json
+
+        mock_client = MagicMock()
+        mock_client.chat.return_value = {}
+        mock_client.get_tool_arguments.return_value = {"value": "x", "value_confidence": 1.0}
+
+        out = tmp_path / "report.json"
+        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+            validate(Text("doc", name="a"), schema=self._schema(), output=out)
+
+        assert out.exists()
+        data = json.loads(out.read_text())
+        assert "fields" in data
 
 
 class TestPublicSummarize:
