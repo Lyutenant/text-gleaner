@@ -12,3 +12,5 @@ results/
 sandbox/
 .DS_Store
 .pdfetch_cache/
+examples/**/statement.txt
+examples/**/transactions_result.json

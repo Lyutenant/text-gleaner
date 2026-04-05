@@ -1,0 +1,1563 @@
+{
+  "name": "fidelity_brokerage_statement_activity_extractor",
+  "description": "Extract structured activity data from a Fidelity monthly brokerage statement including securities, cash, and card transactions.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "account_header": {
+        "type": "object",
+        "description": "Top-level account identification and statement period information",
+        "properties": {
+          "account_number": {
+            "type": "string",
+            "description": "Account number found in the top-right corner of the statement"
+          },
+          "account_number_confidence": {
+            "type": "number",
+            "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+          },
+          "account_name": {
+            "type": "string",
+            "description": "Account name found in the top-right corner of the statement"
+          },
+          "account_name_confidence": {
+            "type": "number",
+            "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+          },
+          "date_range": {
+            "type": "string",
+            "description": "Statement period date range (e.g., July 1 \u2013 July 31, 2015)"
+          },
+          "date_range_confidence": {
+            "type": "number",
+            "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+          }
+        }
+      },
+      "securities_bought_sold": {
+        "type": "array",
+        "description": "Individual settled trade rows for securities bought and sold",
+        "items": {
+          "type": "object",
+          "properties": {
+            "settlement_date": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Date the trade settled"
+            },
+            "settlement_date_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "security_name": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Name of the security traded"
+            },
+            "security_name_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "symbol_or_cusip": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Symbol or CUSIP identifier for the security"
+            },
+            "symbol_or_cusip_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "transaction_description": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Description such as 'You bought' or 'You sold'"
+            },
+            "transaction_description_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "quantity": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Number of shares or units traded"
+            },
+            "quantity_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "price": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Price per share or unit"
+            },
+            "price_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "cost_basis_of_close": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Cost basis of the position after the transaction"
+            },
+            "cost_basis_of_close_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "transaction_cost": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Commission or transaction fees associated with the trade"
+            },
+            "transaction_cost_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "transaction_total": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Total cost or proceeds from the transaction"
+            },
+            "transaction_total_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "wash_sale_amount": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Annotation line for wash sale amounts if applicable"
+            },
+            "wash_sale_amount_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "lt_gain_loss": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Annotation line for long-term gain or loss if applicable"
+            },
+            "lt_gain_loss_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "accrued_interest": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Annotation line for accrued interest if applicable"
+            },
+            "accrued_interest_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            }
+          }
+        }
+      },
+      "total_securities_bought": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Summary total for securities bought in the section"
+      },
+      "total_securities_bought_confidence": {
+        "type": "number",
+        "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+      },
+      "total_securities_sold": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Summary total for securities sold in the section"
+      },
+      "total_securities_sold_confidence": {
+        "type": "number",
+        "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+      },
+      "net_securities_bought_sold": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Summary net total for securities bought and sold"
+      },
+      "net_securities_bought_sold_confidence": {
+        "type": "number",
+        "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+      },
+      "trades_pending_settlement": {
+        "type": "array",
+        "description": "Rows for unsettled trades with future settlement dates",
+        "items": {
+          "type": "object",
+          "properties": {
+            "settlement_date": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Future settlement date for the trade"
+            },
+            "settlement_date_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "security_name": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Name of the security traded"
+            },
+            "security_name_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "symbol_or_cusip": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Symbol or CUSIP identifier for the security"
+            },
+            "symbol_or_cusip_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "transaction_description": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Description of the pending trade"
+            },
+            "transaction_description_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "quantity": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Number of shares or units pending"
+            },
+            "quantity_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "unit_price": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Unit price for the pending trade"
+            },
+            "unit_price_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "cost_basis_of_close": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Cost basis of the position after the pending transaction"
+            },
+            "cost_basis_of_close_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "transaction_total": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Total cost or proceeds for the pending transaction"
+            },
+            "transaction_total_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "lt_loss": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Annotation line for long-term loss if applicable"
+            },
+            "lt_loss_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "lt_disallowed_loss": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Annotation line for long-term disallowed loss if applicable"
+            },
+            "lt_disallowed_loss_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            }
+          }
+        }
+      },
+      "total_trades_pending_settlement": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Summary total for trades pending settlement"
+      },
+      "total_trades_pending_settlement_confidence": {
+        "type": "number",
+        "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+      },
+      "securities_transferred_in": {
+        "type": "array",
+        "description": "Rows for securities transferred into the account",
+        "items": {
+          "type": "object",
+          "properties": {
+            "settlement_date": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Date the transfer settled"
+            },
+            "settlement_date_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "security_name": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Name of the security transferred"
+            },
+            "security_name_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "symbol_or_cusip": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Symbol or CUSIP identifier for the security"
+            },
+            "symbol_or_cusip_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "transaction_description": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Description of the transfer"
+            },
+            "transaction_description_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "quantity": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Number of shares or units transferred"
+            },
+            "quantity_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "price": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Price per share or unit"
+            },
+            "price_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "transaction_amount": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Total amount of the transfer"
+            },
+            "transaction_amount_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            }
+          }
+        }
+      },
+      "total_securities_transferred_in": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Summary total for securities transferred in"
+      },
+      "total_securities_transferred_in_confidence": {
+        "type": "number",
+        "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+      },
+      "securities_transferred_out": {
+        "type": "array",
+        "description": "Rows for securities transferred out of the account",
+        "items": {
+          "type": "object",
+          "properties": {
+            "settlement_date": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Date the transfer settled"
+            },
+            "settlement_date_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "security_name": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Name of the security transferred"
+            },
+            "security_name_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "symbol_or_cusip": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Symbol or CUSIP identifier for the security"
+            },
+            "symbol_or_cusip_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "transaction_description": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Description of the transfer"
+            },
+            "transaction_description_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "quantity": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Number of shares or units transferred"
+            },
+            "quantity_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "price": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Price per share or unit"
+            },
+            "price_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "transaction_amount": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Total amount of the transfer"
+            },
+            "transaction_amount_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            }
+          }
+        }
+      },
+      "total_securities_transferred_out": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Summary total for securities transferred out"
+      },
+      "total_securities_transferred_out_confidence": {
+        "type": "number",
+        "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+      },
+      "dividends_interest_income": {
+        "type": "array",
+        "description": "Rows for dividends, interest, and other income including reinvestments",
+        "items": {
+          "type": "object",
+          "properties": {
+            "settlement_date": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Date the income was settled"
+            },
+            "settlement_date_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "security_name": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Name of the security paying income"
+            },
+            "security_name_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "symbol_or_cusip": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Symbol or CUSIP identifier for the security"
+            },
+            "symbol_or_cusip_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "transaction_description": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Description such as 'Dividend received' or 'Muni exempt interest'"
+            },
+            "transaction_description_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "quantity": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Quantity of shares or units if reinvested"
+            },
+            "quantity_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "price": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Price per share or unit"
+            },
+            "price_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "transaction_amount": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Total amount of income received"
+            },
+            "transaction_amount_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            }
+          }
+        }
+      },
+      "total_dividends_interest_income": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Summary total for dividends, interest, and other income"
+      },
+      "total_dividends_interest_income_confidence": {
+        "type": "number",
+        "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+      },
+      "margin_activity": {
+        "type": "object",
+        "description": "Margin account summary with period and year-to-date columns",
+        "properties": {
+          "period": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Statement period for the margin activity"
+          },
+          "period_confidence": {
+            "type": "number",
+            "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+          },
+          "period_balance": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Margin balance for the period"
+          },
+          "period_balance_confidence": {
+            "type": "number",
+            "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+          },
+          "rate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Interest rate applied to the margin balance"
+          },
+          "rate_confidence": {
+            "type": "number",
+            "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+          },
+          "daily_balance": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Daily margin balance"
+          },
+          "daily_balance_confidence": {
+            "type": "number",
+            "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+          },
+          "interest_paid_period": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Total interest paid for this period"
+          },
+          "interest_paid_period_confidence": {
+            "type": "number",
+            "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+          },
+          "interest_paid_ytd": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Total interest paid year-to-date"
+          },
+          "interest_paid_ytd_confidence": {
+            "type": "number",
+            "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+          }
+        }
+      },
+      "other_activity": {
+        "type": "array",
+        "description": "Rows for corporate actions and miscellaneous activities",
+        "items": {
+          "type": "object",
+          "properties": {
+            "settlement_date": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Date the activity occurred"
+            },
+            "settlement_date_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "security_name": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Name of the security involved"
+            },
+            "security_name_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "symbol_or_cusip": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Symbol or CUSIP identifier for the security"
+            },
+            "symbol_or_cusip_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "transaction_description": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Description such as 'Merger'"
+            },
+            "transaction_description_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "quantity": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Quantity of shares or units"
+            },
+            "quantity_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "price": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Price per share or unit"
+            },
+            "price_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "cost_basis_of_close": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Cost basis of the position after the transaction"
+            },
+            "cost_basis_of_close_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "transaction_cost": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Transaction fees associated with the activity"
+            },
+            "transaction_cost_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "transaction_total": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Total cost or proceeds from the activity"
+            },
+            "transaction_total_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "merger_details": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Annotation line for merger details if applicable"
+            },
+            "merger_details_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "escrow_payment": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Annotation line for escrow payment if applicable"
+            },
+            "escrow_payment_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            }
+          }
+        }
+      },
+      "total_other_activity": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Summary total for other activity"
+      },
+      "total_other_activity_confidence": {
+        "type": "number",
+        "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+      },
+      "deposits": {
+        "type": "array",
+        "description": "Rows for deposits and EFT inflows",
+        "items": {
+          "type": "object",
+          "properties": {
+            "date": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Date of the deposit"
+            },
+            "date_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "reference": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Reference number for the deposit"
+            },
+            "reference_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "transaction_description": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Description of the deposit"
+            },
+            "transaction_description_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "transaction_total": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Total amount deposited"
+            },
+            "transaction_total_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            }
+          }
+        }
+      },
+      "total_deposits_eft_in": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Summary total for deposits and EFT in"
+      },
+      "total_deposits_eft_in_confidence": {
+        "type": "number",
+        "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+      },
+      "withdrawals": {
+        "type": "array",
+        "description": "Rows for withdrawals and EFT outflows",
+        "items": {
+          "type": "object",
+          "properties": {
+            "date": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Date of the withdrawal"
+            },
+            "date_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "reference": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Reference number for the withdrawal"
+            },
+            "reference_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "transaction_description": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Description of the withdrawal"
+            },
+            "transaction_description_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "transaction_total": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Total amount withdrawn"
+            },
+            "transaction_total_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            }
+          }
+        }
+      },
+      "total_withdrawals_eft_out": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Summary total for withdrawals and EFT out"
+      },
+      "total_withdrawals_eft_out_confidence": {
+        "type": "number",
+        "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+      },
+      "debit_card_activity": {
+        "type": "object",
+        "description": "Debit card transaction activity with nested summaries and card details",
+        "properties": {
+          "beginning_balance": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Beginning balance for the card period"
+          },
+          "beginning_balance_confidence": {
+            "type": "number",
+            "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+          },
+          "cash_advances": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Total cash advances on the card"
+          },
+          "cash_advances_confidence": {
+            "type": "number",
+            "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+          },
+          "fees": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Total fees charged to the card"
+          },
+          "fees_confidence": {
+            "type": "number",
+            "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+          },
+          "total_purchases": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Total purchases on the card"
+          },
+          "total_purchases_confidence": {
+            "type": "number",
+            "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+          },
+          "other_card_activity": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Other card activity summary"
+          },
+          "other_card_activity_confidence": {
+            "type": "number",
+            "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+          },
+          "total_payments": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Total payments made on the card"
+          },
+          "total_payments_confidence": {
+            "type": "number",
+            "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+          },
+          "ending_balance": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Ending balance for the card period"
+          },
+          "ending_balance_confidence": {
+            "type": "number",
+            "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+          },
+          "ending_point_balance": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Ending point balance for the card"
+          },
+          "ending_point_balance_confidence": {
+            "type": "number",
+            "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+          },
+          "card_transactions": {
+            "type": "array",
+            "description": "Individual card transactions grouped by card type",
+            "items": {
+              "type": "object",
+              "properties": {
+                "card_type": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Card type such as Platinum or Gold"
+                },
+                "card_type_confidence": {
+                  "type": "number",
+                  "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+                },
+                "account_suffix": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Account suffix for the card"
+                },
+                "account_suffix_confidence": {
+                  "type": "number",
+                  "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+                },
+                "trans_date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Transaction date for the card purchase"
+                },
+                "trans_date_confidence": {
+                  "type": "number",
+                  "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+                },
+                "post_date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Post date for the card transaction"
+                },
+                "post_date_confidence": {
+                  "type": "number",
+                  "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+                },
+                "location_reference": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Location or description of the transaction"
+                },
+                "location_reference_confidence": {
+                  "type": "number",
+                  "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+                },
+                "transaction_total": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Total amount of the card transaction"
+                },
+                "transaction_total_confidence": {
+                  "type": "number",
+                  "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+                },
+                "card_subtotal": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Subtotal for the specific card type"
+                },
+                "card_subtotal_confidence": {
+                  "type": "number",
+                  "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+                }
+              }
+            }
+          },
+          "total_debit_card_activity": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Total debit card activity summary"
+          },
+          "total_debit_card_activity_confidence": {
+            "type": "number",
+            "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+          }
+        }
+      },
+      "bill_payments": {
+        "type": "array",
+        "description": "Rows for bill payments with YTD tracking",
+        "items": {
+          "type": "object",
+          "properties": {
+            "post_date": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Post date for the bill payment"
+            },
+            "post_date_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "payee": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Payee name for the bill payment"
+            },
+            "payee_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "account": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Account number for the bill payment"
+            },
+            "account_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "amount": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Amount of the bill payment"
+            },
+            "amount_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "ytd_payments": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Year-to-date payments for this payee"
+            },
+            "ytd_payments_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            }
+          }
+        }
+      },
+      "total_bill_payments": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Summary total for bill payments"
+      },
+      "total_bill_payments_confidence": {
+        "type": "number",
+        "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+      },
+      "total_ytd_payments": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Summary total for year-to-date bill payments"
+      },
+      "total_ytd_payments_confidence": {
+        "type": "number",
+        "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+      },
+      "checking_activity": {
+        "type": "array",
+        "description": "Rows for check payments",
+        "items": {
+          "type": "object",
+          "properties": {
+            "check_number": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Check number"
+            },
+            "check_number_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "post_date": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Post date for the check"
+            },
+            "post_date_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "code": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Code associated with the check"
+            },
+            "code_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Description of the check payment"
+            },
+            "description_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "transaction_total": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Total amount of the check"
+            },
+            "transaction_total_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "check_number_skipped": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Annotation for check number skipped"
+            },
+            "check_number_skipped_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            }
+          }
+        }
+      },
+      "total_checking_activity": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Summary total for checking activity"
+      },
+      "total_checking_activity_confidence": {
+        "type": "number",
+        "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+      },
+      "fees_charges": {
+        "type": "array",
+        "description": "Rows for fees and charges",
+        "items": {
+          "type": "object",
+          "properties": {
+            "date": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Date of the fee or charge"
+            },
+            "date_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Description of the fee or charge"
+            },
+            "description_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "amount": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Amount of the fee or charge"
+            },
+            "amount_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            }
+          }
+        }
+      },
+      "total_fees_and_charges": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Summary total for fees and charges"
+      },
+      "total_fees_and_charges_confidence": {
+        "type": "number",
+        "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+      },
+      "taxes_withheld": {
+        "type": "array",
+        "description": "Rows for taxes withheld",
+        "items": {
+          "type": "object",
+          "properties": {
+            "date": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Date of the tax withholding"
+            },
+            "date_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "security": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Security associated with the tax withholding"
+            },
+            "security_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Description of the tax withholding"
+            },
+            "description_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "amount": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Amount of tax withheld"
+            },
+            "amount_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            }
+          }
+        }
+      },
+      "total_federal_taxes_withheld": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Summary total for federal taxes withheld"
+      },
+      "total_federal_taxes_withheld_confidence": {
+        "type": "number",
+        "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+      },
+      "total_state_taxes_withheld": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Summary total for state taxes withheld"
+      },
+      "total_state_taxes_withheld_confidence": {
+        "type": "number",
+        "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+      },
+      "total_foreign_taxes_withheld": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Summary total for foreign taxes withheld"
+      },
+      "total_foreign_taxes_withheld_confidence": {
+        "type": "number",
+        "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+      },
+      "total_taxes_withheld": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Summary total for all taxes withheld"
+      },
+      "total_taxes_withheld_confidence": {
+        "type": "number",
+        "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+      },
+      "daily_additions_subtractions": {
+        "type": "array",
+        "description": "Date-by-date table for money market or cash account activity",
+        "items": {
+          "type": "object",
+          "properties": {
+            "date": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Date of the activity"
+            },
+            "date_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "total_additions": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Total additions for the day"
+            },
+            "total_additions_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "total_subtractions": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Total subtractions for the day"
+            },
+            "total_subtractions_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "net_activity": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Net activity for the day"
+            },
+            "net_activity_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "daily_balance": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Daily balance for the account"
+            },
+            "daily_balance_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            },
+            "account_name": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Account name (e.g., Fidelity NY Muni Money Market)"
+            },
+            "account_name_confidence": {
+              "type": "number",
+              "description": "Confidence 0-1: 1.0=verbatim, 0.7=implied, 0.4=inferred, 0.0=not found"
+            }
+          }
+        }
+      }
+    }
+  }
+}

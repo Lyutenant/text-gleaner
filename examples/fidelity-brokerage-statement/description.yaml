@@ -1,0 +1,52 @@
+document: Fidelity monthly brokerage statement — Activity section for a single account
+
+purpose: >
+  Extract all transaction records from the Activity section. Each account's Activity
+  section spans one or more pages and contains several subsections depending on what
+  activity occurred during the period.
+
+sections:
+  securities_bought_sold: >
+    Individual settled trade rows: settlement_date, security_name, symbol_or_cusip,
+    transaction_description (e.g. "You bought" / "You sold"), quantity, price,
+    cost_basis_of_close, transaction_cost, transaction_total.
+    May include annotation lines: wash sale amounts, LT gain/loss, accrued interest.
+    Section ends with: Total Securities Bought, Total Securities Sold,
+    Net Securities Bought & Sold.
+
+  trades_pending_settlement: >
+    Same columns as securities_bought_sold but for unsettled trades
+    (settlement date is in the future).
+
+  dividends_interest_income: >
+    Rows: settlement_date, security_name, symbol_or_cusip,
+    transaction_description (e.g. "Dividend received", "Muni exempt interest",
+    "Interest"), quantity, price, transaction_amount.
+    Includes dividend reinvestments.
+
+  other_activity: >
+    Corporate actions and miscellaneous: settlement_date, security_name,
+    symbol_or_cusip, transaction_description (e.g. "Merger"), quantity, price,
+    cost_basis_of_close, transaction_cost, transaction_total.
+    May have multi-line annotation notes.
+
+  daily_additions_subtractions: >
+    Date-by-date table for a money market or cash account:
+    date, total_additions, total_subtractions, net_activity, daily_balance.
+
+  debit_card_activity: >
+    Card transactions: transaction_date, post_date, location_or_description,
+    transaction_total. Includes beginning balance, cash advances, fees,
+    total purchases summary.
+
+  checking_activity: >
+    Check payments: check_number, post_date, code, description, transaction_total.
+    Ends with Total Checking Activity.
+
+  fees_charges: >
+    Fee rows with date, description, amount.
+
+notes: >
+  Each page identifies its account number and account name in the top-right corner.
+  The Activity section for one account may span multiple consecutive pages labelled
+  "Activity (continued)".
