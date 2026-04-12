@@ -1,4 +1,34 @@
-"""Schema refinement: update an existing schema from new sample documents."""
+"""Schema refinement: update an existing schema from new sample documents.
+
+This module implements a two-pass schema refinement workflow that extends an
+existing extraction schema without discarding what was already designed:
+
+**Pass 1 — Gap analysis** (:func:`_run_gap_analysis`)
+    The LLM compares new sample documents against the existing schema and
+    produces a structured plain-text analysis identifying:
+
+    - Missing fields (present in new samples but absent from the schema)
+    - Type mismatches (wrong JSON type for a field's actual values)
+    - Dead fields (in the schema but never populated by these samples)
+    - Structural issues (e.g. a repeating record typed as a single string)
+    - Description improvements
+
+**Pass 2 — Schema update** (:func:`_run_schema_refinement`)
+    The gap analysis is fed to a second prompt that generates the complete
+    updated schema JSON.  All existing fields are preserved unless the gap
+    analysis explicitly recommends removal.  New fields are added, types are
+    corrected, and descriptions are improved as directed.
+
+**Invalid JSON retry**
+    If Pass 2 returns malformed JSON, the conversation is extended with an
+    error-correction message and the model retries once.  If the retry also
+    fails a :exc:`ValueError` is raised.
+
+**Confidence score detection**
+    If the existing schema uses ``<field>_confidence`` sibling fields, the
+    refinement instruction automatically adds confidence siblings for any new
+    fields added by the update.
+"""
 from __future__ import annotations
 import json
 import logging
@@ -6,7 +36,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import ExtractionConfig
-from .llm_client import LLMClient
+from .llm_client import LLMClient, make_client
 from .schema_generator import _parse_schema_json, _validate_schema, RETRY_PROMPT
 
 logger = logging.getLogger(__name__)
@@ -75,6 +105,8 @@ Rules:
 {confidence_instruction}
 """
 
+# Appended to REFINEMENT_SYSTEM_PROMPT when the existing schema uses confidence fields.
+# Ensures new fields get confidence siblings to match the existing schema style.
 CONFIDENCE_INSTRUCTION = """\
 - The existing schema uses confidence score fields. For every new leaf data field \
 "foo" you add, also add a sibling "foo_confidence" with \
@@ -94,16 +126,37 @@ Produce the complete updated schema JSON now.
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Internal helpers
 # ---------------------------------------------------------------------------
 
 def _detect_confidence_scores(schema: dict) -> bool:
-    """Return True if the schema already uses _confidence sibling fields."""
+    """Return ``True`` if the existing schema uses ``_confidence`` sibling fields.
+
+    This is used to auto-detect whether confidence scoring is enabled so the
+    refinement prompt can instruct the model to add confidence fields for any
+    new properties it introduces.
+
+    Args:
+        schema: The existing schema dict (top-level properties are inspected).
+
+    Returns:
+        ``True`` if at least one top-level property name ends with
+        ``"_confidence"``.
+    """
     props = schema.get("parameters", {}).get("properties", {})
     return any(k.endswith("_confidence") for k in props)
 
 
 def _build_refinement_system_prompt(confidence_scores: bool) -> str:
+    """Build the Pass 2 refinement system prompt.
+
+    Args:
+        confidence_scores: If ``True``, the confidence instruction is appended
+            so the model adds ``<field>_confidence`` siblings for new fields.
+
+    Returns:
+        The complete system prompt string for Pass 2.
+    """
     ci = CONFIDENCE_INSTRUCTION if confidence_scores else ""
     return REFINEMENT_SYSTEM_PROMPT.format(confidence_instruction=ci)
 
@@ -113,7 +166,20 @@ def _run_gap_analysis(
     schema: dict,
     sample_text: str,
 ) -> str:
-    """Pass 1: ask the LLM to compare new samples against the existing schema."""
+    """Pass 1: ask the LLM to compare new samples against the existing schema.
+
+    The model sees both the full existing schema JSON and the concatenated
+    sample documents, and produces a structured plain-text gap analysis.
+
+    Args:
+        client: An LLM client instance.
+        schema: The existing schema dict (serialized to JSON for the prompt).
+        sample_text: All new sample documents concatenated, each prefixed with
+            ``=== name ===``.
+
+    Returns:
+        The model's plain-text gap analysis.
+    """
     messages = [
         {"role": "system", "content": GAP_ANALYSIS_SYSTEM_PROMPT},
         {"role": "user", "content": GAP_ANALYSIS_USER_TEMPLATE.format(
@@ -134,9 +200,29 @@ def _run_schema_refinement(
     analysis: str,
     confidence_scores: bool,
 ) -> dict[str, Any]:
-    """Pass 2: produce the updated schema from the existing one + gap analysis.
+    """Pass 2: produce the updated schema from the existing one and the gap analysis.
 
-    Retries once within the same conversation if the response is not valid JSON.
+    The model is given both the full existing schema JSON and the gap analysis
+    from Pass 1, and is instructed to return the complete updated schema.
+    Existing fields are preserved; new fields and fixes from the gap analysis
+    are applied.
+
+    If the response is not valid JSON, the conversation is extended with an
+    error-correction message and the model retries once.
+
+    Args:
+        client: An LLM client instance.
+        schema: The existing schema dict (shown to the model as context).
+        analysis: The plain-text gap analysis from :func:`_run_gap_analysis`.
+        confidence_scores: Whether to instruct the model to add confidence
+            siblings for any new fields.
+
+    Returns:
+        The updated schema dict.
+
+    Raises:
+        ValueError: If the model returns invalid JSON on both the initial
+            attempt and the retry.
     """
     system_prompt = _build_refinement_system_prompt(confidence_scores)
     messages: list[dict] = [
@@ -158,6 +244,7 @@ def _run_schema_refinement(
         parse_error = str(e)
         logger.warning("Schema parse failed, retrying: %s", parse_error)
 
+    # Retry by extending the conversation so the model sees its own bad output.
     retry_messages = messages + [
         {"role": "assistant", "content": raw},
         {"role": "user", "content": RETRY_PROMPT.format(error=parse_error)},
@@ -182,6 +269,7 @@ def refine_schema(
     output_path: Path | None,
     *,
     confidence_scores: bool | None = None,
+    provider: str | None = None,
     base_url: str | None = None,
     model: str | None = None,
     api_key: str | None = None,
@@ -190,11 +278,42 @@ def refine_schema(
     timeout: int | None = None,
     model_profile: str | None = None,
 ) -> dict:
+    """Update an existing schema from new sample documents using two LLM passes.
+
+    This is the internal entry point called by the public
+    :func:`textgleaner.refine_schema` function after it has loaded files and
+    merged configuration.  It is not part of the public API.
+
+    Confidence score detection is automatic: if the existing schema contains
+    ``<field>_confidence`` fields, new fields added by the refinement will
+    also receive confidence siblings.  Pass ``confidence_scores=False`` to
+    override this.
+
+    Args:
+        schema: The existing schema dict to refine.
+        samples: List of ``(text, name)`` tuples — the new sample documents.
+            Empty samples are logged and skipped.
+        output_path: Optional path to write the updated schema JSON.  Parent
+            directories are created if they do not exist.
+        confidence_scores: Whether new fields should get confidence siblings.
+            ``None`` (default) auto-detects from the existing schema.
+        provider: LLM backend (``"ollama"`` or ``"claude"``).
+        base_url, model, api_key, temperature, max_tokens, timeout,
+        model_profile: Passed to :func:`~llm_client.make_client`.
+
+    Returns:
+        The updated schema dict.
+
+    Raises:
+        ValueError: If no readable sample text was provided, or if schema
+            refinement fails after the JSON-correction retry.
+    """
     # Auto-detect confidence_scores from the existing schema if not specified.
     if confidence_scores is None:
         confidence_scores = _detect_confidence_scores(schema)
 
-    client = LLMClient(
+    client = make_client(
+        provider=provider,
         base_url=base_url,
         model=model,
         api_key=api_key,
@@ -204,6 +323,7 @@ def refine_schema(
         model_profile=model_profile,
     )
 
+    # Build the combined sample text block.
     snippets: list[str] = []
     for text, name in samples:
         text = text.strip()
@@ -220,7 +340,7 @@ def refine_schema(
     # Pass 1: gap analysis
     analysis = _run_gap_analysis(client, schema, sample_text)
 
-    # Pass 2: schema refinement
+    # Pass 2: schema refinement (with optional JSON retry)
     updated = _run_schema_refinement(client, schema, analysis, confidence_scores)
 
     if output_path is not None:
@@ -229,7 +349,7 @@ def refine_schema(
             json.dump(updated, f, indent=2)
             f.write("\n")
 
-    # Summary of changes
+    # Print a human-readable summary of what changed.
     old_props = schema.get("parameters", {}).get("properties", {})
     new_props = updated.get("parameters", {}).get("properties", {})
     old_fields = {k for k in old_props if not k.endswith("_confidence")}

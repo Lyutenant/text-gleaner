@@ -211,7 +211,7 @@ class TestPublicValidate:
             {"value": None, "value_confidence": 0.0},
         ]
 
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+        with patch("textgleaner.extractor.make_client", return_value=mock_client):
             report = validate(
                 [Text("doc a", name="a"), Text("doc b", name="b")],
                 schema=self._schema(),
@@ -229,7 +229,7 @@ class TestPublicValidate:
         mock_client.chat.return_value = {}
         mock_client.get_tool_arguments.return_value = {"value": "x", "value_confidence": 1.0}
 
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+        with patch("textgleaner.extractor.make_client", return_value=mock_client):
             report = validate(Text("doc", name="a"), schema=self._schema())
 
         assert "fields" in report
@@ -244,7 +244,7 @@ class TestPublicValidate:
         mock_client.get_tool_arguments.return_value = {"value": "x", "value_confidence": 1.0}
 
         out = tmp_path / "report.json"
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+        with patch("textgleaner.extractor.make_client", return_value=mock_client):
             validate(Text("doc", name="a"), schema=self._schema(), output=out)
 
         assert out.exists()
@@ -289,7 +289,7 @@ class TestExtractCsvOutput:
         mock_client.get_tool_arguments.side_effect = [{"value": "a"}, {"value": "b"}]
 
         out = tmp_path / "results.csv"
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+        with patch("textgleaner.extractor.make_client", return_value=mock_client):
             result = extract(
                 [Text("doc a", name="a"), Text("doc b", name="b")],
                 schema=self._schema(),

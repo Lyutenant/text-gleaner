@@ -147,19 +147,19 @@ class TestRunSchemaRefinement:
 class TestRefineSchema:
     def test_two_llm_calls_made(self):
         mock = _mock_client()
-        with patch("textgleaner.schema_refiner.LLMClient", return_value=mock):
+        with patch("textgleaner.schema_refiner.make_client", return_value=mock):
             refine_schema(_base_schema(), [("sample text", "doc.txt")], None)
         assert mock.chat.call_count == 2
 
     def test_returns_updated_schema(self):
         mock = _mock_client()
-        with patch("textgleaner.schema_refiner.LLMClient", return_value=mock):
+        with patch("textgleaner.schema_refiner.make_client", return_value=mock):
             result = refine_schema(_base_schema(), [("sample text", "doc.txt")], None)
         assert "vendor" in result["parameters"]["properties"]
 
     def test_existing_fields_preserved(self):
         mock = _mock_client()
-        with patch("textgleaner.schema_refiner.LLMClient", return_value=mock):
+        with patch("textgleaner.schema_refiner.make_client", return_value=mock):
             result = refine_schema(_base_schema(), [("sample text", "doc.txt")], None)
         props = result["parameters"]["properties"]
         assert "invoice_number" in props
@@ -180,7 +180,7 @@ class TestRefineSchema:
     def test_confidence_prompt_sent_when_schema_has_confidence(self):
         """refine_schema passes confidence_scores=True when auto-detected from schema."""
         mock = _mock_client()
-        with patch("textgleaner.schema_refiner.LLMClient", return_value=mock):
+        with patch("textgleaner.schema_refiner.make_client", return_value=mock):
             refine_schema(_base_schema(with_confidence=True), [("text", "doc.txt")], None)
         # Pass 2 system prompt should mention confidence
         system_msg = mock.chat.call_args_list[1][0][0][0]["content"]
@@ -189,7 +189,7 @@ class TestRefineSchema:
     def test_output_file_written(self, tmp_path):
         out = tmp_path / "refined.json"
         mock = _mock_client()
-        with patch("textgleaner.schema_refiner.LLMClient", return_value=mock):
+        with patch("textgleaner.schema_refiner.make_client", return_value=mock):
             refine_schema(_base_schema(), [("sample text", "doc.txt")], out)
         assert out.exists()
         data = json.loads(out.read_text())
@@ -197,7 +197,7 @@ class TestRefineSchema:
 
     def test_raises_on_empty_samples(self):
         mock = _mock_client()
-        with patch("textgleaner.schema_refiner.LLMClient", return_value=mock):
+        with patch("textgleaner.schema_refiner.make_client", return_value=mock):
             with pytest.raises(ValueError, match="No readable text"):
                 refine_schema(_base_schema(), [("", "empty.txt")], None)
 
@@ -206,7 +206,7 @@ class TestRefineSchema:
         mock = MagicMock()
         mock.chat.return_value = {}
         mock.get_content.side_effect = ["gap analysis", fenced]
-        with patch("textgleaner.schema_refiner.LLMClient", return_value=mock):
+        with patch("textgleaner.schema_refiner.make_client", return_value=mock):
             result = refine_schema(_base_schema(), [("text", "doc.txt")], None)
         assert result["name"] == "extract_invoice"
 
@@ -219,7 +219,7 @@ class TestPublicRefineSchema:
         sample_file.write_text("Invoice #1234 from Acme Corp, total $500")
 
         mock = _mock_client()
-        with patch("textgleaner.schema_refiner.LLMClient", return_value=mock):
+        with patch("textgleaner.schema_refiner.make_client", return_value=mock):
             from textgleaner import refine_schema
             result = refine_schema(schema_file, [sample_file])
 
@@ -230,7 +230,7 @@ class TestPublicRefineSchema:
         sample_file.write_text("Invoice #1234, total $500")
 
         mock = _mock_client()
-        with patch("textgleaner.schema_refiner.LLMClient", return_value=mock):
+        with patch("textgleaner.schema_refiner.make_client", return_value=mock):
             from textgleaner import refine_schema
             result = refine_schema(_base_schema(), [sample_file])
 
@@ -238,7 +238,7 @@ class TestPublicRefineSchema:
 
     def test_text_instance_as_sample(self):
         mock = _mock_client()
-        with patch("textgleaner.schema_refiner.LLMClient", return_value=mock):
+        with patch("textgleaner.schema_refiner.make_client", return_value=mock):
             from textgleaner import refine_schema, Text
             result = refine_schema(_base_schema(), Text("sample text", name="section"))
 
@@ -251,7 +251,7 @@ class TestPublicRefineSchema:
         sample_file.write_text("Invoice #1234 from Acme Corp")
 
         mock = _mock_client()
-        with patch("textgleaner.schema_refiner.LLMClient", return_value=mock):
+        with patch("textgleaner.schema_refiner.make_client", return_value=mock):
             from textgleaner import refine_schema
             refine_schema(schema_file, [sample_file], output=schema_file)
 

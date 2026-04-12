@@ -100,10 +100,10 @@ class TestConfig:
             }},
         }
 
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client) as MockClient:
+        with patch("textgleaner.extractor.make_client", return_value=mock_client) as mock_make:
             extract(Text("Value: 42"), schema=schema, config=cfg)
 
-        _, kwargs = MockClient.call_args
+        _, kwargs = mock_make.call_args
         assert kwargs.get("base_url") == "http://cfg-host:11434"
         assert kwargs.get("model") == "cfg-model"
 
@@ -124,10 +124,10 @@ class TestConfig:
             }},
         }
 
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client) as MockClient:
+        with patch("textgleaner.extractor.make_client", return_value=mock_client) as mock_make:
             extract(Text("Value: x"), schema=schema, config=cfg, base_url="http://override:9999")
 
-        _, kwargs = MockClient.call_args
+        _, kwargs = mock_make.call_args
         assert kwargs.get("base_url") == "http://override:9999"
 
 

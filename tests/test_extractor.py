@@ -39,7 +39,7 @@ class TestExtract:
         mock_client.chat.return_value = {}
         mock_client.get_tool_arguments.return_value = {"account_number": "12345"}
 
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+        with patch("textgleaner.extractor.make_client", return_value=mock_client):
             result = extract([("Account: 12345", "doc.txt")], self._schema(), None, single=True)
 
         assert result == {"account_number": "12345"}
@@ -52,7 +52,7 @@ class TestExtract:
             {"account_number": "222"},
         ]
 
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+        with patch("textgleaner.extractor.make_client", return_value=mock_client):
             result = extract(
                 [("Account: 111", "jan.txt"), ("Account: 222", "feb.txt")],
                 self._schema(), None, single=False,
@@ -70,7 +70,7 @@ class TestExtract:
         mock_client.chat.return_value = {}
         mock_client.get_tool_arguments.return_value = {"account_number": "12345"}
 
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+        with patch("textgleaner.extractor.make_client", return_value=mock_client):
             extract([("Account: 12345", "doc.txt")], self._schema(), out, single=True)
 
         assert out.exists()
@@ -85,7 +85,7 @@ class TestExtract:
         mock_client.chat.return_value = {}
         mock_client.get_tool_arguments.return_value = {"account_number": "x"}
 
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+        with patch("textgleaner.extractor.make_client", return_value=mock_client):
             # Default is 200_000 — would fail without override
             result = extract([("x" * 300_000, "doc.txt")], self._schema(), None, single=True, max_chars=0)
 
@@ -107,7 +107,7 @@ class TestExtractionMethods:
         mock_client.chat.return_value = {}
         mock_client.get_tool_arguments.return_value = {"value": "42"}
 
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+        with patch("textgleaner.extractor.make_client", return_value=mock_client):
             result = extract([("text", "doc.txt")], self._schema(), None, single=True,
                              extraction_method="tool_call")
 
@@ -121,7 +121,7 @@ class TestExtractionMethods:
         mock_client.chat.return_value = {}
         mock_client.get_content.return_value = '{"value": "99"}'
 
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+        with patch("textgleaner.extractor.make_client", return_value=mock_client):
             result = extract([("text", "doc.txt")], self._schema(), None, single=True,
                              extraction_method="structured_output")
 
@@ -135,7 +135,7 @@ class TestExtractionMethods:
         mock_client.chat.return_value = {}
         mock_client.get_content.return_value = '```json\n{"value": "42"}\n```'
 
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+        with patch("textgleaner.extractor.make_client", return_value=mock_client):
             result = extract([("text", "doc.txt")], self._schema(), None, single=True,
                              extraction_method="structured_output")
 
@@ -146,7 +146,7 @@ class TestExtractionMethods:
         mock_client.chat.return_value = {}
         mock_client.get_content.return_value = '{"value": "x"}'
 
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+        with patch("textgleaner.extractor.make_client", return_value=mock_client):
             extract([("text", "doc.txt")], self._schema(), None, single=True,
                     extraction_method="structured_output")
 
@@ -160,7 +160,7 @@ class TestExtractionMethods:
         mock_client.chat.return_value = {}
         mock_client.get_tool_arguments.return_value = {"value": "auto"}
 
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+        with patch("textgleaner.extractor.make_client", return_value=mock_client):
             result = extract([("text", "doc.txt")], self._schema(), None, single=True,
                              extraction_method="auto")
 
@@ -173,7 +173,7 @@ class TestExtractionMethods:
         mock_client.get_tool_arguments.side_effect = ValueError("No tool_calls and no content")
         mock_client.get_content.return_value = '{"value": "fallback"}'
 
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+        with patch("textgleaner.extractor.make_client", return_value=mock_client):
             result = extract([("text", "doc.txt")], self._schema(), None, single=True,
                              extraction_method="auto")
 
@@ -191,7 +191,7 @@ class TestExtractionMethods:
         mock_client.chat.side_effect = [http_error, {}]
         mock_client.get_content.return_value = '{"value": "fallback"}'
 
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+        with patch("textgleaner.extractor.make_client", return_value=mock_client):
             result = extract([("text", "doc.txt")], self._schema(), None, single=True,
                              extraction_method="auto")
 
@@ -207,7 +207,7 @@ class TestExtractionMethods:
         mock_client = MagicMock()
         mock_client.chat.side_effect = http_error
 
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+        with patch("textgleaner.extractor.make_client", return_value=mock_client):
             with pytest.raises(httpx.HTTPStatusError):
                 extract([("text", "doc.txt")], self._schema(), None, single=True,
                         extraction_method="auto")
@@ -361,7 +361,7 @@ class TestRetryLowConfidence:
                 "amount_confidence": {"type": "number"},
             }},
         }
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+        with patch("textgleaner.extractor.make_client", return_value=mock_client):
             result = extract([("text", "doc.txt")], schema, None, single=True,
                              confidence_retry=True)
         assert result["amount"] == "42.00"
@@ -378,7 +378,7 @@ class TestRetryLowConfidence:
                 "amount_confidence": {"type": "number"},
             }},
         }
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+        with patch("textgleaner.extractor.make_client", return_value=mock_client):
             extract([("text", "doc.txt")], schema, None, single=True)
         # Only one chat call — no retry
         assert mock_client.chat.call_count == 1
@@ -400,7 +400,7 @@ class TestOnResult:
         mock_client.get_tool_arguments.side_effect = [{"value": "a"}, {"value": "b"}]
         calls = []
 
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+        with patch("textgleaner.extractor.make_client", return_value=mock_client):
             extract(
                 [("text1", "doc1.txt"), ("text2", "doc2.txt")],
                 self._schema(), None, single=False,
@@ -419,7 +419,7 @@ class TestOnResult:
         ]
         order = []
 
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+        with patch("textgleaner.extractor.make_client", return_value=mock_client):
             extract(
                 [("t1", "a.txt"), ("t2", "b.txt"), ("t3", "c.txt")],
                 self._schema(), None, single=False,
@@ -433,7 +433,7 @@ class TestOnResult:
         mock_client.chat.return_value = {}
         mock_client.get_tool_arguments.return_value = {"value": "x"}
 
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+        with patch("textgleaner.extractor.make_client", return_value=mock_client):
             result = extract([("text", "doc.txt")], self._schema(), None, single=True)
 
         assert result == {"value": "x"}
@@ -444,7 +444,7 @@ class TestOnResult:
         mock_client.get_tool_arguments.return_value = {"value": "z"}
         calls = []
 
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+        with patch("textgleaner.extractor.make_client", return_value=mock_client):
             extract(
                 [("text", "doc.txt")], self._schema(), None, single=True,
                 on_result=lambda name, result: calls.append((name, result)),
@@ -470,7 +470,7 @@ class TestOnResult:
         ]
         calls = []
 
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+        with patch("textgleaner.extractor.make_client", return_value=mock_client):
             extract(
                 [("text", "doc.txt")], schema, None, single=True,
                 confidence_retry=True,
@@ -489,7 +489,7 @@ class TestOnResult:
         def bad_callback(name, result):
             raise RuntimeError("callback error")
 
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+        with patch("textgleaner.extractor.make_client", return_value=mock_client):
             with pytest.raises(RuntimeError, match="callback error"):
                 extract(
                     [("text", "doc.txt")], self._schema(), None, single=True,
@@ -503,7 +503,7 @@ class TestOnResult:
         mock_client.get_tool_arguments.side_effect = [{"value": "a"}, {"value": "b"}]
         calls = []
 
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+        with patch("textgleaner.extractor.make_client", return_value=mock_client):
             from textgleaner import extract, Text
             extract(
                 [Text("t1", name="s1"), Text("t2", name="s2")],
@@ -532,7 +532,7 @@ class TestPublicAPI:
         mock_client.chat.return_value = {}
         mock_client.get_tool_arguments.return_value = {"value": "42"}
 
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+        with patch("textgleaner.extractor.make_client", return_value=mock_client):
             from textgleaner import extract
             result = extract(str(f), schema=self._schema())
 
@@ -543,7 +543,7 @@ class TestPublicAPI:
         mock_client.chat.return_value = {}
         mock_client.get_tool_arguments.return_value = {"value": "99"}
 
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+        with patch("textgleaner.extractor.make_client", return_value=mock_client):
             from textgleaner import extract, Text
             result = extract(Text("Value: 99", name="section"), schema=self._schema())
 
@@ -554,7 +554,7 @@ class TestPublicAPI:
         mock_client.chat.return_value = {}
         mock_client.get_tool_arguments.side_effect = [{"value": "a"}, {"value": "b"}]
 
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client):
+        with patch("textgleaner.extractor.make_client", return_value=mock_client):
             from textgleaner import extract, Text
             result = extract(
                 [Text("...", name="holdings"), Text("...", name="activities")],
@@ -571,7 +571,7 @@ class TestPublicAPI:
         mock_client.chat.return_value = {}
         mock_client.get_tool_arguments.return_value = {"value": "99"}
 
-        with patch("textgleaner.extractor.LLMClient", return_value=mock_client) as MockClient:
+        with patch("textgleaner.extractor.make_client", return_value=mock_client) as MockClient:
             from textgleaner import extract
             extract(str(f), schema=self._schema(), base_url="http://custom:9999")
 

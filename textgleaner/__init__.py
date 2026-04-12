@@ -39,6 +39,7 @@ class Config:
     def __init__(
         self,
         *,
+        provider: Union[str, None] = None,
         base_url: Union[str, None] = None,
         model: Union[str, None] = None,
         api_key: Union[str, None] = None,
@@ -51,6 +52,7 @@ class Config:
         confidence_retry: Union[bool, None] = None,
         model_profile: Union[str, None] = None,
     ):
+        self.provider = provider
         self.base_url = base_url
         self.model = model
         self.api_key = api_key
@@ -95,6 +97,7 @@ class Config:
         llm = data.get("llm", {})
         ext = data.get("extraction", {})
         return cls(
+            provider=llm.get("provider"),
             base_url=llm.get("base_url"),
             model=llm.get("model"),
             api_key=llm.get("api_key"),
@@ -144,7 +147,7 @@ def _merge_config(config: Union[Config, None], **kwargs) -> dict:
     merged: dict = {}
     if config is not None:
         for attr in (
-            "base_url", "model", "api_key", "temperature",
+            "provider", "base_url", "model", "api_key", "temperature",
             "max_tokens", "timeout", "confidence_scores", "max_chars",
             "extraction_method", "confidence_retry", "model_profile",
         ):
@@ -164,6 +167,7 @@ def generate_schema(
     *,
     config: Union[Config, None] = None,
     confidence_scores: Union[bool, None] = None,
+    provider: Union[str, None] = None,
     model_profile: Union[str, None] = None,
     base_url: Union[str, None] = None,
     model: Union[str, None] = None,
@@ -206,6 +210,7 @@ def generate_schema(
     resolved = _merge_config(
         config,
         confidence_scores=confidence_scores,
+        provider=provider,
         model_profile=model_profile,
         base_url=base_url,
         model=model,
@@ -219,6 +224,7 @@ def generate_schema(
         desc_str,
         out_path,
         confidence_scores=resolved.get("confidence_scores"),
+        provider=resolved.get("provider"),
         model_profile=resolved.get("model_profile"),
         base_url=resolved.get("base_url"),
         model=resolved.get("model"),
@@ -236,6 +242,7 @@ def refine_schema(
     *,
     config: Union[Config, None] = None,
     confidence_scores: Union[bool, None] = None,
+    provider: Union[str, None] = None,
     model_profile: Union[str, None] = None,
     base_url: Union[str, None] = None,
     model: Union[str, None] = None,
@@ -286,6 +293,7 @@ def refine_schema(
     resolved = _merge_config(
         config,
         confidence_scores=confidence_scores,
+        provider=provider,
         model_profile=model_profile,
         base_url=base_url,
         model=model,
@@ -299,6 +307,7 @@ def refine_schema(
         sample_pairs,
         out_path,
         confidence_scores=resolved.get("confidence_scores"),
+        provider=resolved.get("provider"),
         model_profile=resolved.get("model_profile"),
         base_url=resolved.get("base_url"),
         model=resolved.get("model"),
@@ -319,6 +328,7 @@ def extract(
     on_result: Union[Callable[[str, dict], None], None] = None,
     extraction_method: Union[str, None] = None,
     confidence_retry: Union[bool, None] = None,
+    provider: Union[str, None] = None,
     model_profile: Union[str, None] = None,
     base_url: Union[str, None] = None,
     model: Union[str, None] = None,
@@ -382,6 +392,7 @@ def extract(
         max_chars=max_chars,
         extraction_method=extraction_method,
         confidence_retry=confidence_retry,
+        provider=provider,
         model_profile=model_profile,
         base_url=base_url,
         model=model,
@@ -400,6 +411,7 @@ def extract(
         max_chars=resolved.get("max_chars"),
         extraction_method=resolved.get("extraction_method"),
         confidence_retry=resolved.get("confidence_retry"),
+        provider=resolved.get("provider"),
         model_profile=resolved.get("model_profile"),
         on_result=on_result,
         base_url=resolved.get("base_url"),

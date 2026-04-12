@@ -1,3 +1,44 @@
+"""Command-line interface for textgleaner.
+
+Four commands are exposed via the ``textgleaner`` entry point:
+
+``generate-schema``
+    Phase 1: Read sample text files and generate a JSON extraction schema using
+    a two-pass LLM strategy (structural analysis → schema design).
+
+``refine-schema``
+    Update an existing schema from new sample documents without re-running
+    Phase 1 from scratch (gap analysis → schema update).
+
+``extract``
+    Phase 2: Extract structured data from one or more text files using a schema.
+    Supports JSON, CSV, and Excel output.  Prints per-file progress when
+    processing multiple files.
+
+``validate``
+    Dry-run extraction on a small sample and print a per-field quality table
+    showing null rates and average confidence scores.
+
+LLM configuration is read from ``config.yaml`` in the current directory (or a
+file passed via ``--config``).  If the file does not exist the tool falls back
+to environment variables and hard-coded defaults.
+
+Usage examples::
+
+    textgleaner generate-schema \\
+        --samples sample1.txt sample2.txt \\
+        --description description.yaml \\
+        --output schema.json
+
+    textgleaner extract \\
+        --inputs jan.txt feb.txt \\
+        --schema schema.json \\
+        --output results.csv
+
+    textgleaner validate \\
+        --inputs sample.txt \\
+        --schema schema.json
+"""
 from __future__ import annotations
 import json
 import logging
@@ -124,11 +165,13 @@ def extract(
     cfg = Config.from_yaml(config) if config.exists() else Config()
 
     # Show per-file progress when processing multiple inputs.
+    # counter is a list (mutable cell) so the closure can update it.
     n_inputs = len(inputs)
     pad = len(str(n_inputs))
-    counter = [0]  # mutable cell for closure
+    counter = [0]
 
     def _progress(name: str, result: dict) -> None:
+        """on_result callback that prints a progress line after each file."""
         counter[0] += 1
         n_fields = len([k for k in result if not k.endswith("_confidence")])
         typer.echo(f"  [{counter[0]:{pad}d}/{n_inputs}] {name}  ({n_fields} fields)")
@@ -143,18 +186,32 @@ def extract(
     )
 
     if report is not None:
+        # Normalise to {name: dict} before passing to summarize().
+        # For a single input, _extract() returns the flat dict directly;
+        # we wrap it with the filename as the key.
         results_dict = result if isinstance(result, dict) and not _is_flat(result) else \
                        {inputs[0].name: result} if len(inputs) == 1 else result
         summarize(results_dict, output=report)
         typer.echo(f"Summary written to {report}")
 
     if output is None:
+        # No output file specified — print JSON to stdout.
         typer.echo(json.dumps(result, indent=2))
 
 
 def _is_flat(d: dict) -> bool:
-    """Heuristic: True if this looks like a single extracted dict rather than
-    a {filename: dict} multi-result dict. Used to normalise before summarize()."""
+    """Heuristic: return ``True`` if *d* looks like a single extracted dict.
+
+    A ``{filename: dict}`` multi-result mapping has dict values; a single
+    extracted result has scalar / list / None values at the top level.
+
+    Args:
+        d: The dict to inspect.
+
+    Returns:
+        ``True`` if *d* is non-empty and NOT all values are dicts (i.e. it
+        looks like a flat single-document extraction result).
+    """
     return bool(d) and not all(isinstance(v, dict) for v in d.values())
 
 

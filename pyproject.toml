@@ -37,6 +37,7 @@ Issues = "https://github.com/Lyutenant/text-gleaner/issues"
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
 excel = ["openpyxl>=3.1"]
+claude = ["anthropic>=0.40"]
 
 [project.scripts]
 textgleaner = "textgleaner.cli:app"
