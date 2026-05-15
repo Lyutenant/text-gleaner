@@ -2,7 +2,7 @@
 
 Agent skills for generating textgleaner-compatible extraction schemas through reasoning, without invoking the textgleaner library or CLI.
 
-Each subfolder contains a version of the same skill adapted to a specific agent framework's conventions.
+Both frameworks follow the [Agent Skills](https://agentskills.io) open standard: a named directory containing `SKILL.md` with YAML frontmatter. The skill content is identical across frameworks — only the frontmatter fields differ.
 
 ## Available skills
 
@@ -16,15 +16,28 @@ Each subfolder contains a version of the same skill adapted to a specific agent 
 skills/
   openclaw/
     generate-schema/
-      SKILL.md        ← OpenClaw format (YAML frontmatter + markdown)
+      SKILL.md        ← name + description required (hyphen-case)
   claude-code/
-    generate-schema.md  ← Claude Code slash command (copy to .claude/commands/)
+    generate-schema/
+      SKILL.md        ← description recommended; supports $ARGUMENTS, argument-hint, disable-model-invocation
+```
+
+### Claude Code
+
+Copy the `claude-code/generate-schema/` directory to your project's `.claude/skills/` or your personal `~/.claude/skills/`. Invoke with `/generate-schema sample.txt "what to extract"`.
+
+```bash
+cp -r skills/claude-code/generate-schema ~/.claude/skills/
 ```
 
 ### OpenClaw
 
-Copy the `generate-schema/` directory to `~/.openclaw/workspace/skills/`, then run `/new` or restart the gateway.
+Copy the `openclaw/generate-schema/` directory to `~/.openclaw/workspace/skills/`, then run `/new` or restart the gateway.
 
-### Claude Code
+```bash
+cp -r skills/openclaw/generate-schema ~/.openclaw/workspace/skills/
+```
 
-Copy `claude-code/generate-schema.md` to your project's `.claude/commands/` directory. Invoke with `/generate-schema <samples and description>`.
+## Adding a new framework
+
+Create a new subfolder under `skills/` named after the framework. Adapt the frontmatter to that framework's conventions — the two-pass methodology and schema format rules in the body stay identical.

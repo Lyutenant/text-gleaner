@@ -1,5 +1,5 @@
 ---
-name: generate_schema
+name: generate-schema
 description: Generate a structured data extraction schema from plain-text sample documents and a user-provided description of what to extract. Produces a textgleaner-compatible JSON schema without invoking any external tool or library.
 ---
 
